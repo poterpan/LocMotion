@@ -515,6 +515,20 @@
 
     loadDevices();
 
+    // Restore connected state from server on page load
+    (async () => {
+      try {
+        const res = await fetch('/api/devices/status');
+        const data = await res.json();
+        if (data.connected) {
+          connected = true;
+          connectBtn.textContent = '中斷連線';
+          connectBtn.classList.replace('bg-blue-600', 'bg-red-600');
+          connectBtn.classList.replace('hover:bg-blue-700', 'hover:bg-red-700');
+        }
+      } catch (_) {}
+    })();
+
     // ------------------------------------------------------------------ //
     //  Mode presets                                                        //
     // ------------------------------------------------------------------ //

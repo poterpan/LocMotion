@@ -103,6 +103,16 @@ async def api_connect_device(body: dict):
     return JSONResponse({"error": "Connection failed"}, status_code=500)
 
 
+@app.get("/api/devices/status")
+async def api_device_status():
+    """Check if any device is currently connected on the server side."""
+    conns = list(device_mgr._connections.keys())
+    if conns:
+        udid = conns[0]
+        return {"connected": True, "udid": udid}
+    return {"connected": False}
+
+
 @app.post("/api/devices/disconnect")
 async def api_disconnect_device():
     global motion_engine
