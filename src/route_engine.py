@@ -10,8 +10,18 @@ from src.models import LatLng, Route, RouteStep, StopPoint
 
 logger = logging.getLogger("locmotion.route")
 
-OSRM_BASE = "https://router.project-osrm.org"
-OVERPASS_BASE = "https://overpass-api.de/api/interpreter"
+# OSRM mirrors — tuples of (base_url, profile_format)
+# project-osrm uses /route/v1/{profile}/ where profile is car/foot/bike
+# openstreetmap.de uses /routed-{profile}/route/v1/driving/ where profile is car/foot/bike
+OSRM_ENDPOINTS = [
+    ("https://router.project-osrm.org", "project_osrm"),
+    ("https://routing.openstreetmap.de", "osm_de"),
+]
+OVERPASS_ENDPOINTS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.osm.ch/api/interpreter",
+]
 NOMINATIM_BASE = "https://nominatim.openstreetmap.org"
 
 _OSRM_PROFILES = {"driving": "car", "walking": "foot", "cycling": "bike"}
@@ -33,17 +43,11 @@ class RouteEngine:
         waypoints: list[LatLng] | None = None,
     ) -> Route:
         profile = _OSRM_PROFILES.get(mode, "car")
-        # Build coordinate string: start;wp1;wp2;...;end
         points = [start] + (waypoints or []) + [end]
         coords_str = ";".join(f"{p.lng},{p.lat}" for p in points)
-        url = f"{OSRM_BASE}/route/v1/{profile}/{coords_str}"
-        resp = await self._client.get(url, params={
-            "overview": "full",
-            "geometries": "geojson",
-            "steps": "true",
-        })
-        resp.raise_for_status()
-        data = resp.json()
+        data = await self._osrm_query(profile, coords_str)
+        if data is None:
+            raise RuntimeError("所有 OSRM endpoint 都無法使用，請稍後再試")
         route_data = data["routes"][0]
 
         polyline = [
@@ -72,17 +76,13 @@ class RouteEngine:
     async def find_traffic_signals(self, route: Route) -> list[StopPoint]:
         bbox = self._route_bbox(route, buffer_m=50)
         query = (
-            f"[out:json][timeout:10];"
+            f"[out:json][timeout:25];"
             f'node["highway"="traffic_signals"]'
             f"({bbox['south']},{bbox['west']},{bbox['north']},{bbox['east']});"
             f"out body;"
         )
-        try:
-            resp = await self._client.get(OVERPASS_BASE, params={"data": query})
-            resp.raise_for_status()
-            elements = resp.json().get("elements", [])
-        except Exception as e:
-            logger.warning(f"Overpass API failed, skipping traffic signals: {e}")
+        elements = await self._overpass_query(query)
+        if elements is None:
             return []
 
         stops: list[StopPoint] = []
@@ -94,6 +94,57 @@ class RouteEngine:
 
         stops.sort(key=lambda s: s.distance_along_route)
         return stops
+
+    async def _osrm_query(self, profile: str, coords_str: str) -> dict | None:
+        """Run OSRM route query with retry + mirror fallback."""
+        import asyncio as _asyncio
+        params = {"overview": "full", "geometries": "geojson", "steps": "true"}
+        last_err = None
+        for attempt in range(2):
+            for base, kind in OSRM_ENDPOINTS:
+                if kind == "project_osrm":
+                    url = f"{base}/route/v1/{profile}/{coords_str}"
+                else:  # osm_de
+                    url = f"{base}/routed-{profile}/route/v1/driving/{coords_str}"
+                try:
+                    resp = await self._client.get(url, params=params, timeout=30.0)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        if data.get("code") == "Ok" and data.get("routes"):
+                            return data
+                        last_err = f"{base} -> code={data.get('code')}"
+                    else:
+                        last_err = f"{base} -> HTTP {resp.status_code}"
+                    logger.debug(f"OSRM {last_err}")
+                except Exception as e:
+                    last_err = f"{base} -> {e}"
+                    logger.debug(f"OSRM {last_err}")
+            if attempt == 0:
+                await _asyncio.sleep(1.0)
+        logger.error(f"All OSRM endpoints failed. Last: {last_err}")
+        return None
+
+    async def _overpass_query(self, query: str) -> list | None:
+        """Run Overpass query with retry + mirror fallback. Returns elements or None on total failure."""
+        import asyncio as _asyncio
+        last_err = None
+        for attempt in range(2):  # try each endpoint up to 2 times
+            for endpoint in OVERPASS_ENDPOINTS:
+                try:
+                    resp = await self._client.get(
+                        endpoint, params={"data": query}, timeout=30.0,
+                    )
+                    if resp.status_code == 200:
+                        return resp.json().get("elements", [])
+                    last_err = f"{endpoint} -> {resp.status_code}"
+                    logger.debug(f"Overpass {last_err}")
+                except Exception as e:
+                    last_err = f"{endpoint} -> {e}"
+                    logger.debug(f"Overpass {last_err}")
+            if attempt == 0:
+                await _asyncio.sleep(1.0)  # brief backoff before retry round
+        logger.warning(f"All Overpass endpoints failed, skipping traffic signals. Last: {last_err}")
+        return None
 
     def parse_gpx(self, content: bytes) -> Route:
         gpx = gpxpy.parse(content.decode("utf-8"))
