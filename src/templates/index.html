@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -57,11 +57,11 @@
       <select id="deviceSelect"
         class="bg-gray-700 border border-gray-600 text-gray-100 text-sm rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
         style="max-width:200px;">
-        <option value="">-- No devices --</option>
+        <option value="">-- 未偵測到裝置 --</option>
       </select>
       <button id="connectBtn"
         class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-3 py-1 rounded transition-colors">
-        Connect
+        連線
       </button>
     </div>
   </header>
@@ -81,24 +81,24 @@
 
       <!-- Route Section -->
       <section>
-        <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Route</h2>
+        <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">路線規劃</h2>
 
         <div class="relative mb-1">
-          <input id="fromInput" type="text" placeholder="From (search address or place)"
+          <input id="fromInput" type="text" placeholder="起點（搜尋地址或地標）"
             class="w-full bg-gray-700 border border-gray-600 text-gray-100 text-sm rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500" autocomplete="off" />
           <div id="fromDropdown" class="autocomplete-list hidden"></div>
         </div>
         <div class="relative mb-2">
-          <input id="toInput" type="text" placeholder="To (search address or place)"
+          <input id="toInput" type="text" placeholder="終點（搜尋地址或地標）"
             class="w-full bg-gray-700 border border-gray-600 text-gray-100 text-sm rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500" autocomplete="off" />
           <div id="toDropdown" class="autocomplete-list hidden"></div>
         </div>
 
         <!-- Mode Buttons -->
         <div class="flex gap-1 mb-2">
-          <button id="btnCar"  class="mode-btn active flex-1 bg-gray-700 hover:bg-gray-600 text-sm py-1 rounded transition-colors" data-mode="driving">Car</button>
-          <button id="btnWalk" class="mode-btn flex-1 bg-gray-700 hover:bg-gray-600 text-sm py-1 rounded transition-colors" data-mode="walking">Walk</button>
-          <button id="btnBike" class="mode-btn flex-1 bg-gray-700 hover:bg-gray-600 text-sm py-1 rounded transition-colors" data-mode="cycling">Bike</button>
+          <button id="btnCar"  class="mode-btn active flex-1 bg-gray-700 hover:bg-gray-600 text-sm py-1 rounded transition-colors" data-mode="driving">開車</button>
+          <button id="btnWalk" class="mode-btn flex-1 bg-gray-700 hover:bg-gray-600 text-sm py-1 rounded transition-colors" data-mode="walking">步行</button>
+          <button id="btnBike" class="mode-btn flex-1 bg-gray-700 hover:bg-gray-600 text-sm py-1 rounded transition-colors" data-mode="cycling">騎車</button>
         </div>
 
         <!-- Waypoint list (populated by JS) -->
@@ -106,26 +106,26 @@
         <div class="flex gap-1 mb-2">
           <button id="clearPointsBtn"
             class="flex-1 bg-gray-700 hover:bg-gray-600 text-xs py-1 rounded border border-gray-600 transition-colors">
-            Clear Points
+            清除路線點
           </button>
         </div>
 
-        <p class="text-xs text-gray-500 mb-2">Click map to add points. Drag to reorder. Dbl-click = set location.</p>
+        <p class="text-xs text-gray-500 mb-2">單擊地圖加入路線點，可拖曳調整。雙擊 = 定位。</p>
 
         <button id="planRouteBtn"
           class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-1 rounded mb-1 transition-colors">
-          Plan Route
+          規劃路線
         </button>
 
         <!-- Options -->
         <div class="flex gap-3 mb-2 text-xs text-gray-400">
           <label class="flex items-center gap-1 cursor-pointer">
             <input id="returnToStartChk" type="checkbox" class="accent-blue-500" />
-            Return to start
+            返回起點
           </label>
           <label class="flex items-center gap-1 cursor-pointer">
             <input id="loopChk" type="checkbox" class="accent-blue-500" />
-            Loop
+            循環
           </label>
         </div>
 
@@ -135,7 +135,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
           </svg>
-          <span>Upload GPX / GeoJSON</span>
+          <span>上傳 GPX / GeoJSON</span>
           <input id="fileUpload" type="file" accept=".gpx,.geojson,.json" class="hidden" />
         </label>
       </section>
@@ -144,13 +144,13 @@
 
       <!-- Speed & Motion -->
       <section>
-        <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Speed &amp; Motion</h2>
+        <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">速度與運動</h2>
 
         <div class="space-y-2">
           <!-- Speed -->
           <div>
             <div class="flex justify-between items-center text-xs text-gray-400 mb-0.5">
-              <span>Speed</span>
+              <span>速度</span>
               <span id="speedVal" class="slider-label text-gray-200">50 km/h</span>
             </div>
             <input id="speedSlider" type="range" min="1" max="130" value="50" step="1"
@@ -160,7 +160,7 @@
           <!-- Acceleration -->
           <div>
             <div class="flex justify-between items-center text-xs text-gray-400 mb-0.5">
-              <span>Accel</span>
+              <span>加速度</span>
               <span id="accelVal" class="slider-label text-gray-200">2.5 m/s²</span>
             </div>
             <input id="accelSlider" type="range" min="0.1" max="10" value="2.5" step="0.1"
@@ -170,7 +170,7 @@
           <!-- Deceleration -->
           <div>
             <div class="flex justify-between items-center text-xs text-gray-400 mb-0.5">
-              <span>Decel</span>
+              <span>減速度</span>
               <span id="decelVal" class="slider-label text-gray-200">3.0 m/s²</span>
             </div>
             <input id="decelSlider" type="range" min="0.1" max="10" value="3.0" step="0.1"
@@ -183,13 +183,13 @@
 
       <!-- Realism -->
       <section>
-        <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Realism</h2>
+        <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">擬真設定</h2>
 
         <div class="space-y-2">
           <!-- Jitter -->
           <div>
             <div class="flex justify-between items-center text-xs text-gray-400 mb-0.5">
-              <span>Jitter</span>
+              <span>GPS 抖動</span>
               <span id="jitterVal" class="slider-label text-gray-200">3 m</span>
             </div>
             <input id="jitterSlider" type="range" min="0" max="20" value="3" step="0.5"
@@ -199,7 +199,7 @@
           <!-- Drift -->
           <div>
             <div class="flex justify-between items-center text-xs text-gray-400 mb-0.5">
-              <span>Drift</span>
+              <span>靜止漂移</span>
               <span id="driftVal" class="slider-label text-gray-200">3 m</span>
             </div>
             <input id="driftSlider" type="range" min="0" max="30" value="3" step="0.5"
@@ -209,7 +209,7 @@
           <!-- Speed variation -->
           <div>
             <div class="flex justify-between items-center text-xs text-gray-400 mb-0.5">
-              <span>Speed +/-</span>
+              <span>速度變異</span>
               <span id="varVal" class="slider-label text-gray-200">10 %</span>
             </div>
             <input id="varSlider" type="range" min="0" max="50" value="10" step="1"
@@ -219,7 +219,7 @@
           <!-- Stop chance -->
           <div>
             <div class="flex justify-between items-center text-xs text-gray-400 mb-0.5">
-              <span>Stop chance</span>
+              <span>停車機率</span>
               <span id="stopChanceVal" class="slider-label text-gray-200">50 %</span>
             </div>
             <input id="stopChanceSlider" type="range" min="0" max="100" value="50" step="1"
@@ -229,7 +229,7 @@
           <!-- Stop time min/max -->
           <div>
             <div class="flex justify-between items-center text-xs text-gray-400 mb-1">
-              <span>Stop time</span>
+              <span>停車時間</span>
               <span class="text-gray-200 text-xs">
                 <span id="stopMinVal">15</span>–<span id="stopMaxVal">45</span> s
               </span>
@@ -251,15 +251,21 @@
         <div class="flex gap-1">
           <button id="startBtn"
             class="flex-1 bg-green-600 hover:bg-green-700 text-white text-sm font-medium py-1.5 rounded transition-colors">
-            Start
+            開始
           </button>
           <button id="pauseBtn"
             class="flex-1 bg-yellow-600 hover:bg-yellow-700 text-white text-sm font-medium py-1.5 rounded transition-colors">
-            Pause
+            暫停
           </button>
           <button id="stopBtn"
             class="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm font-medium py-1.5 rounded transition-colors">
-            Stop
+            停止
+          </button>
+        </div>
+        <div class="flex gap-1 mt-1">
+          <button id="clearTrailBtn"
+            class="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs py-1 rounded border border-gray-600 transition-colors">
+            清除軌跡
           </button>
         </div>
       </section>
@@ -270,8 +276,8 @@
   <!-- ===== STATUS BAR ===== -->
   <footer id="statusBar"
     class="bg-gray-800 border-t border-gray-700 px-4 py-1.5 flex-shrink-0 flex items-center gap-4 text-xs">
-    <span class="font-semibold text-gray-400">Status:</span>
-    <span id="statusText" class="font-medium text-gray-300">Idle</span>
+    <span class="font-semibold text-gray-400">狀態：</span>
+    <span id="statusText" class="font-medium text-gray-300">閒置</span>
     <span id="statusSpeed" class="text-gray-400 hidden"></span>
     <span id="statusDist"  class="text-gray-400 hidden"></span>
     <span id="statusEta"   class="text-gray-400 hidden"></span>
@@ -309,7 +315,7 @@
         L.DomEvent.disableScrollPropagation(container);
         const input = L.DomUtil.create('input', '', container);
         input.type = 'text';
-        input.placeholder = 'Search place...';
+        input.placeholder = '搜尋地點...';
         input.id = 'mapSearchInput';
         const dropdown = L.DomUtil.create('div', 'autocomplete-list hidden', container);
         dropdown.id = 'mapSearchDropdown';
@@ -447,14 +453,14 @@
         if (!list || list.length === 0) {
           const opt = document.createElement('option');
           opt.value = '';
-          opt.textContent = '-- No devices --';
+          opt.textContent = '-- 未偵測到裝置 --';
           deviceSelect.appendChild(opt);
         } else {
           list.forEach(d => {
             const opt = document.createElement('option');
             opt.value = d.udid;
-            opt.dataset.connType = d.conn_type || 'usb';
-            opt.textContent = d.name + ' (' + d.ios_version + ')';
+            opt.dataset.connType = d.conn_type || 'USB';
+            opt.textContent = d.name + ' (' + d.ios_version + ' / ' + d.conn_type + ')';
             deviceSelect.appendChild(opt);
           });
         }
@@ -475,22 +481,22 @@
           });
           if (!resp.ok) {
             const data = await resp.json().catch(() => ({}));
-            alert('Connection failed: ' + (data.error || resp.statusText));
+            alert('連線失敗：' + (data.error || resp.statusText));
             return;
           }
           connected = true;
-          connectBtn.textContent = 'Disconnect';
+          connectBtn.textContent = '中斷連線';
           connectBtn.classList.replace('bg-blue-600', 'bg-red-600');
           connectBtn.classList.replace('hover:bg-blue-700', 'hover:bg-red-700');
         } catch (err) {
-          alert('Connection failed: ' + err.message);
+          alert('連線失敗：' + err.message);
         }
       } else {
         try {
           await fetch('/api/devices/disconnect', { method: 'POST' });
         } catch (_) {}
         connected = false;
-        connectBtn.textContent = 'Connect';
+        connectBtn.textContent = '連線';
         connectBtn.classList.replace('bg-red-600', 'bg-blue-600');
         connectBtn.classList.replace('hover:bg-red-700', 'hover:bg-blue-700');
       }
@@ -703,7 +709,7 @@
         points = routePoints.slice();
       } else if (fromQ || toQ) {
         // Geocode text inputs
-        setStatus('Geocoding...', 'text-gray-300');
+        setStatus('搜尋地址中...', 'text-gray-300');
         let startPt = selectedCoords['fromInput'];
         let endPt   = selectedCoords['toInput'];
         if (!startPt && fromQ) {
@@ -721,12 +727,12 @@
       }
 
       if (points.length < 2) {
-        setStatus('Need at least 2 points. Click map or enter addresses.', 'text-yellow-400');
+        setStatus('至少需要 2 個點。請在地圖上點擊或輸入地址。', 'text-yellow-400');
         return;
       }
 
       try {
-        setStatus('Planning route...', 'text-gray-300');
+        setStatus('規劃路線中...', 'text-gray-300');
         const res = await fetch('/api/route/plan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -739,10 +745,10 @@
         const data = await res.json();
         if (data.error) { setStatus(data.error, 'text-red-400'); return; }
         drawRoute(data);
-        setStatus('Route planned (' + (data.distance / 1000).toFixed(1) + ' km).', 'text-green-400');
+        setStatus('路線已規劃（' + (data.distance / 1000).toFixed(1) + ' km）', 'text-green-400');
       } catch (err) {
         console.error('planRoute failed:', err);
-        setStatus('Route planning failed.', 'text-red-400');
+        setStatus('路線規劃失敗', 'text-red-400');
       }
     });
 
@@ -755,14 +761,14 @@
       const formData = new FormData();
       formData.append('file', file);
       try {
-        setStatus('Uploading route...', 'text-gray-300');
+        setStatus('上傳路線中...', 'text-gray-300');
         const res  = await fetch('/api/route/upload', { method: 'POST', body: formData });
         const data = await res.json();
         drawRoute(data);
-        setStatus('Route loaded from file.', 'text-green-400');
+        setStatus('已載入路線檔案', 'text-green-400');
       } catch (err) {
         console.error('upload failed:', err);
-        setStatus('File upload failed.', 'text-red-400');
+        setStatus('檔案上傳失敗', 'text-red-400');
       }
       e.target.value = '';
     });
@@ -822,13 +828,23 @@
     //  Status bar                                                          //
     // ------------------------------------------------------------------ //
     const STATUS_COLORS = {
-      moving:        'text-green-400',
-      accelerating:  'text-blue-400',
-      decelerating:  'text-yellow-400',
-      stopped:       'text-red-400',
-      idle:          'text-gray-400',
-      paused:        'text-gray-400',
-      completed:     'text-purple-400',
+      moving:            'text-green-400',
+      accelerating:      'text-blue-400',
+      decelerating:      'text-yellow-400',
+      stopped_at_signal: 'text-red-400',
+      idle:              'text-gray-400',
+      paused:            'text-gray-400',
+      completed:         'text-purple-400',
+    };
+
+    const STATUS_TEXT = {
+      moving:            '移動中',
+      accelerating:      '加速中',
+      decelerating:      '減速中',
+      stopped_at_signal: '等紅燈',
+      idle:              '閒置',
+      paused:            '已暫停',
+      completed:         '已完成',
     };
 
     function setStatus(msg, colorClass) {
@@ -844,7 +860,7 @@
       const etaEl    = document.getElementById('statusEta');
 
       const st = (data.status || 'idle').toLowerCase();
-      statusEl.textContent = st.replace(/_/g, ' ');
+      statusEl.textContent = STATUS_TEXT[st] || st.replace(/_/g, ' ');
       statusEl.className   = 'font-medium ' + (STATUS_COLORS[st] || 'text-gray-300');
 
       if (data.speed_kmh !== undefined) {
@@ -929,7 +945,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(getSimParams()),
         });
-        setStatus('Starting...', 'text-green-400');
+        setStatus('啟動中...', 'text-green-400');
       } catch (err) {
         console.error('sim start failed:', err);
       }
@@ -938,7 +954,7 @@
     document.getElementById('pauseBtn').addEventListener('click', async () => {
       try {
         await fetch('/api/simulation/pause', { method: 'POST' });
-        setStatus('Paused', 'text-gray-400');
+        setStatus('已暫停', 'text-gray-400');
       } catch (err) {
         console.error('sim pause failed:', err);
       }
@@ -947,7 +963,7 @@
     document.getElementById('stopBtn').addEventListener('click', async () => {
       try {
         await fetch('/api/simulation/stop', { method: 'POST' });
-        setStatus('Stopped', 'text-red-400');
+        setStatus('已停止', 'text-red-400');
         document.getElementById('statusSpeed').classList.add('hidden');
         document.getElementById('statusDist').classList.add('hidden');
         document.getElementById('statusEta').classList.add('hidden');
@@ -957,6 +973,11 @@
       } catch (err) {
         console.error('sim stop failed:', err);
       }
+    });
+
+    document.getElementById('clearTrailBtn').addEventListener('click', () => {
+      trailPositions.length = 0;
+      if (trailPolyline) { map.removeLayer(trailPolyline); trailPolyline = null; }
     });
 
     // Apply initial preset
