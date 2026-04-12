@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LocMotion</title>
+  <!-- Leaflet 1.9 -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Tailwind CSS 2.2 -->
+  <link href="https://unpkg.com/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
+  <style>
+    html, body { height: 100%; margin: 0; padding: 0; }
+    #map { width: 100%; height: 100%; }
+    .slider-label { min-width: 3rem; text-align: right; }
+    /* Custom scrollbar for sidebar */
+    #sidebar::-webkit-scrollbar { width: 4px; }
+    #sidebar::-webkit-scrollbar-track { background: #1f2937; }
+    #sidebar::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 2px; }
+    /* Range input styling */
+    input[type=range] { accent-color: #3b82f6; }
+    /* Mode button active state */
+    .mode-btn.active { background-color: #2563eb; color: white; }
+    /* Disabled button */
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+  </style>
+</head>
+<body class="bg-gray-900 text-gray-100 flex flex-col" style="height:100vh;overflow:hidden;">
+
+  <!-- ===== HEADER ===== -->
+  <header class="bg-gray-800 border-b border-gray-700 flex items-center justify-between px-4 py-2 flex-shrink-0">
+    <span class="text-lg font-bold tracking-wide text-blue-400">LocMotion</span>
+    <div class="flex items-center gap-2">
+      <select id="deviceSelect"
+        class="bg-gray-700 border border-gray-600 text-gray-100 text-sm rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        style="max-width:200px;">
+        <option value="">-- No devices --</option>
+      </select>
+      <button id="connectBtn"
+        class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-3 py-1 rounded transition-colors">
+        Connect
+      </button>
+    </div>
+  </header>
+
+  <!-- ===== MAIN AREA ===== -->
+  <div class="flex flex-1 overflow-hidden">
+
+    <!-- Map -->
+    <div class="flex-1 relative">
+      <div id="map" class="absolute inset-0"></div>
+    </div>
+
+    <!-- ===== SIDEBAR ===== -->
+    <aside id="sidebar"
+      class="bg-gray-800 border-l border-gray-700 overflow-y-auto flex-shrink-0 p-3 space-y-4"
+      style="width:260px;">
+
+      <!-- Route Section -->
+      <section>
+        <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Route</h2>
+
+        <input id="fromInput" type="text" placeholder="From address"
+          class="w-full bg-gray-700 border border-gray-600 text-gray-100 text-sm rounded px-2 py-1 mb-1 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+        <input id="toInput" type="text" placeholder="To address"
+          class="w-full bg-gray-700 border border-gray-600 text-gray-100 text-sm rounded px-2 py-1 mb-2 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+
+        <!-- Mode Buttons -->
+        <div class="flex gap-1 mb-2">
+          <button id="btnCar"  class="mode-btn active flex-1 bg-gray-700 hover:bg-gray-600 text-sm py-1 rounded transition-colors" data-mode="driving">Car</button>
+          <button id="btnWalk" class="mode-btn flex-1 bg-gray-700 hover:bg-gray-600 text-sm py-1 rounded transition-colors" data-mode="walking">Walk</button>
+          <button id="btnBike" class="mode-btn flex-1 bg-gray-700 hover:bg-gray-600 text-sm py-1 rounded transition-colors" data-mode="cycling">Bike</button>
+        </div>
+
+        <button id="planRouteBtn"
+          class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-1 rounded mb-2 transition-colors">
+          Plan Route
+        </button>
+
+        <!-- GPX / GeoJSON Upload -->
+        <label class="w-full flex items-center justify-center gap-1 bg-gray-700 hover:bg-gray-600 text-sm py-1 rounded cursor-pointer transition-colors border border-gray-600">
+          <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+          </svg>
+          <span>Upload GPX / GeoJSON</span>
+          <input id="fileUpload" type="file" accept=".gpx,.geojson,.json" class="hidden" />
+        </label>
+      </section>
+
+      <hr class="border-gray-700" />
+
+      <!-- Speed & Motion -->
+      <section>
+        <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Speed &amp; Motion</h2>
+
+        <div class="space-y-2">
+          <!-- Speed -->
+          <div>
+            <div class="flex justify-between items-center text-xs text-gray-400 mb-0.5">
+              <span>Speed</span>
+              <span id="speedVal" class="slider-label text-gray-200">50 km/h</span>
+            </div>
+            <input id="speedSlider" type="range" min="1" max="130" value="50" step="1"
+              class="w-full h-1.5 rounded" />
+          </div>
+
+          <!-- Acceleration -->
+          <div>
+            <div class="flex justify-between items-center text-xs text-gray-400 mb-0.5">
+              <span>Accel</span>
+              <span id="accelVal" class="slider-label text-gray-200">2.5 m/s²</span>
+            </div>
+            <input id="accelSlider" type="range" min="0.1" max="10" value="2.5" step="0.1"
+              class="w-full h-1.5 rounded" />
+          </div>
+
+          <!-- Deceleration -->
+          <div>
+            <div class="flex justify-between items-center text-xs text-gray-400 mb-0.5">
+              <span>Decel</span>
+              <span id="decelVal" class="slider-label text-gray-200">3.0 m/s²</span>
+            </div>
+            <input id="decelSlider" type="range" min="0.1" max="10" value="3.0" step="0.1"
+              class="w-full h-1.5 rounded" />
+          </div>
+        </div>
+      </section>
+
+      <hr class="border-gray-700" />
+
+      <!-- Realism -->
+      <section>
+        <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Realism</h2>
+
+        <div class="space-y-2">
+          <!-- Jitter -->
+          <div>
+            <div class="flex justify-between items-center text-xs text-gray-400 mb-0.5">
+              <span>Jitter</span>
+              <span id="jitterVal" class="slider-label text-gray-200">3 m</span>
+            </div>
+            <input id="jitterSlider" type="range" min="0" max="20" value="3" step="0.5"
+              class="w-full h-1.5 rounded" />
+          </div>
+
+          <!-- Drift -->
+          <div>
+            <div class="flex justify-between items-center text-xs text-gray-400 mb-0.5">
+              <span>Drift</span>
+              <span id="driftVal" class="slider-label text-gray-200">3 m</span>
+            </div>
+            <input id="driftSlider" type="range" min="0" max="30" value="3" step="0.5"
+              class="w-full h-1.5 rounded" />
+          </div>
+
+          <!-- Speed variation -->
+          <div>
+            <div class="flex justify-between items-center text-xs text-gray-400 mb-0.5">
+              <span>Speed +/-</span>
+              <span id="varVal" class="slider-label text-gray-200">10 %</span>
+            </div>
+            <input id="varSlider" type="range" min="0" max="50" value="10" step="1"
+              class="w-full h-1.5 rounded" />
+          </div>
+
+          <!-- Stop chance -->
+          <div>
+            <div class="flex justify-between items-center text-xs text-gray-400 mb-0.5">
+              <span>Stop chance</span>
+              <span id="stopChanceVal" class="slider-label text-gray-200">50 %</span>
+            </div>
+            <input id="stopChanceSlider" type="range" min="0" max="100" value="50" step="1"
+              class="w-full h-1.5 rounded" />
+          </div>
+
+          <!-- Stop time min/max -->
+          <div>
+            <div class="flex justify-between items-center text-xs text-gray-400 mb-1">
+              <span>Stop time</span>
+              <span class="text-gray-200 text-xs">
+                <span id="stopMinVal">15</span>–<span id="stopMaxVal">45</span> s
+              </span>
+            </div>
+            <div class="flex gap-1">
+              <input id="stopMinSlider" type="range" min="1" max="120" value="15" step="1"
+                class="w-full h-1.5 rounded" />
+              <input id="stopMaxSlider" type="range" min="1" max="300" value="45" step="1"
+                class="w-full h-1.5 rounded" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <hr class="border-gray-700" />
+
+      <!-- Simulation Controls -->
+      <section>
+        <div class="flex gap-1">
+          <button id="startBtn"
+            class="flex-1 bg-green-600 hover:bg-green-700 text-white text-sm font-medium py-1.5 rounded transition-colors">
+            Start
+          </button>
+          <button id="pauseBtn"
+            class="flex-1 bg-yellow-600 hover:bg-yellow-700 text-white text-sm font-medium py-1.5 rounded transition-colors">
+            Pause
+          </button>
+          <button id="stopBtn"
+            class="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm font-medium py-1.5 rounded transition-colors">
+            Stop
+          </button>
+        </div>
+      </section>
+
+    </aside>
+  </div>
+
+  <!-- ===== STATUS BAR ===== -->
+  <footer id="statusBar"
+    class="bg-gray-800 border-t border-gray-700 px-4 py-1.5 flex-shrink-0 flex items-center gap-4 text-xs">
+    <span class="font-semibold text-gray-400">Status:</span>
+    <span id="statusText" class="font-medium text-gray-300">Idle</span>
+    <span id="statusSpeed" class="text-gray-400 hidden"></span>
+    <span id="statusDist"  class="text-gray-400 hidden"></span>
+    <span id="statusEta"   class="text-gray-400 hidden"></span>
+  </footer>
+
+  <!-- ===== JAVASCRIPT ===== -->
+  <script>
+  (() => {
+    'use strict';
+
+    // ------------------------------------------------------------------ //
+    //  Map setup                                                           //
+    // ------------------------------------------------------------------ //
+    const map = L.map('map', { zoomControl: true }).setView([25.033, 121.565], 13);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19,
+    }).addTo(map);
+
+    // Current position marker (blue circle)
+    const posIcon = L.divIcon({
+      className: '',
+      html: '<div style="width:14px;height:14px;background:#3b82f6;border:2px solid #fff;border-radius:50%;box-shadow:0 0 6px rgba(59,130,246,.7)"></div>',
+      iconSize: [14, 14],
+      iconAnchor: [7, 7],
+    });
+    let posMarker = null;
+
+    // Route polyline
+    let routePolyline = null;
+    // Traffic signal markers
+    let signalMarkers = [];
+    // Trail (last 200 positions)
+    const trailPositions = [];
+    let trailPolyline = null;
+
+    // ------------------------------------------------------------------ //
+    //  Map click -> set static location                                    //
+    // ------------------------------------------------------------------ //
+    map.on('click', async (e) => {
+      const { lat, lng } = e.latlng;
+      try {
+        await fetch('/api/location/set', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lat, lng }),
+        });
+        updatePosMarker(lat, lng);
+      } catch (err) {
+        console.error('location/set failed:', err);
+      }
+    });
+
+    // ------------------------------------------------------------------ //
+    //  Devices                                                             //
+    // ------------------------------------------------------------------ //
+    const deviceSelect = document.getElementById('deviceSelect');
+    const connectBtn   = document.getElementById('connectBtn');
+    let connected = false;
+
+    async function loadDevices() {
+      try {
+        const res  = await fetch('/api/devices');
+        const list = await res.json();
+        // Clear existing options (safe DOM)
+        while (deviceSelect.firstChild) deviceSelect.removeChild(deviceSelect.firstChild);
+        if (!list || list.length === 0) {
+          const opt = document.createElement('option');
+          opt.value = '';
+          opt.textContent = '-- No devices --';
+          deviceSelect.appendChild(opt);
+        } else {
+          list.forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d.udid;
+            opt.dataset.connType = d.conn_type || 'usb';
+            opt.textContent = d.name + ' (' + d.ios_version + ')';
+            deviceSelect.appendChild(opt);
+          });
+        }
+      } catch (err) {
+        console.error('loadDevices failed:', err);
+      }
+    }
+
+    connectBtn.addEventListener('click', async () => {
+      if (!connected) {
+        const selected = deviceSelect.options[deviceSelect.selectedIndex];
+        if (!selected || !selected.value) return;
+        try {
+          await fetch('/api/devices/connect', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ udid: selected.value, conn_type: selected.dataset.connType || 'usb' }),
+          });
+          connected = true;
+          connectBtn.textContent = 'Disconnect';
+          connectBtn.classList.replace('bg-blue-600', 'bg-red-600');
+          connectBtn.classList.replace('hover:bg-blue-700', 'hover:bg-red-700');
+        } catch (err) {
+          console.error('connect failed:', err);
+        }
+      } else {
+        try {
+          await fetch('/api/devices/disconnect', { method: 'POST' });
+        } catch (_) {}
+        connected = false;
+        connectBtn.textContent = 'Connect';
+        connectBtn.classList.replace('bg-red-600', 'bg-blue-600');
+        connectBtn.classList.replace('hover:bg-red-700', 'hover:bg-blue-700');
+      }
+    });
+
+    loadDevices();
+
+    // ------------------------------------------------------------------ //
+    //  Mode presets                                                        //
+    // ------------------------------------------------------------------ //
+    const PRESETS = {
+      driving: { speed: 50, accel: 2.5, decel: 3.0, jitter: 3, drift: 3,  variation: 10, stopChance: 50, stopMin: 15, stopMax: 45 },
+      walking: { speed: 5,  accel: 1.0, decel: 1.5, jitter: 3, drift: 5,  variation: 15, stopChance: 30, stopMin: 5,  stopMax: 15 },
+      cycling: { speed: 18, accel: 1.5, decel: 2.0, jitter: 3, drift: 4,  variation: 12, stopChance: 40, stopMin: 8,  stopMax: 25 },
+    };
+
+    let currentMode = 'driving';
+
+    function applyPreset(mode) {
+      const p = PRESETS[mode];
+      if (!p) return;
+      currentMode = mode;
+
+      setSlider('speedSlider',      p.speed,       'speedVal',       v => v + ' km/h');
+      setSlider('accelSlider',      p.accel,       'accelVal',       v => v.toFixed(1) + ' m/s²');
+      setSlider('decelSlider',      p.decel,       'decelVal',       v => v.toFixed(1) + ' m/s²');
+      setSlider('jitterSlider',     p.jitter,      'jitterVal',      v => v + ' m');
+      setSlider('driftSlider',      p.drift,       'driftVal',       v => v + ' m');
+      setSlider('varSlider',        p.variation,   'varVal',         v => v + ' %');
+      setSlider('stopChanceSlider', p.stopChance,  'stopChanceVal',  v => v + ' %');
+      setSlider('stopMinSlider',    p.stopMin,     'stopMinVal',     v => v);
+      setSlider('stopMaxSlider',    p.stopMax,     'stopMaxVal',     v => v);
+
+      // Update active button style
+      document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+      const activeBtn = document.querySelector('[data-mode="' + mode + '"]');
+      if (activeBtn) activeBtn.classList.add('active');
+    }
+
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => applyPreset(btn.dataset.mode));
+    });
+
+    // ------------------------------------------------------------------ //
+    //  Slider helpers                                                      //
+    // ------------------------------------------------------------------ //
+    function setSlider(sliderId, value, labelId, fmt) {
+      const slider = document.getElementById(sliderId);
+      const label  = document.getElementById(labelId);
+      if (slider) slider.value = value;
+      if (label)  label.textContent = fmt(parseFloat(value));
+    }
+
+    function bindSlider(sliderId, labelId, fmt) {
+      const slider = document.getElementById(sliderId);
+      const label  = document.getElementById(labelId);
+      if (!slider) return;
+      slider.addEventListener('input', () => {
+        if (label) label.textContent = fmt(parseFloat(slider.value));
+        // Live speed update during simulation
+        if (sliderId === 'speedSlider') {
+          fetch('/api/simulation/speed', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ speed_kmh: parseFloat(slider.value) }),
+          }).catch(() => {});
+        }
+      });
+    }
+
+    bindSlider('speedSlider',      'speedVal',      v => v + ' km/h');
+    bindSlider('accelSlider',      'accelVal',      v => v.toFixed(1) + ' m/s²');
+    bindSlider('decelSlider',      'decelVal',      v => v.toFixed(1) + ' m/s²');
+    bindSlider('jitterSlider',     'jitterVal',     v => v + ' m');
+    bindSlider('driftSlider',      'driftVal',      v => v + ' m');
+    bindSlider('varSlider',        'varVal',        v => v + ' %');
+    bindSlider('stopChanceSlider', 'stopChanceVal', v => v + ' %');
+    bindSlider('stopMinSlider',    'stopMinVal',    v => Math.round(v));
+    bindSlider('stopMaxSlider',    'stopMaxVal',    v => Math.round(v));
+
+    // ------------------------------------------------------------------ //
+    //  Route planning                                                      //
+    // ------------------------------------------------------------------ //
+    let routeStart = null;
+    let routeEnd   = null;
+
+    async function geocode(query) {
+      const res  = await fetch('/api/geocode?q=' + encodeURIComponent(query));
+      const list = await res.json();
+      if (list && list.length > 0) return list[0];
+      return null;
+    }
+
+    document.getElementById('planRouteBtn').addEventListener('click', async () => {
+      const fromQ = document.getElementById('fromInput').value.trim();
+      const toQ   = document.getElementById('toInput').value.trim();
+      if (!fromQ || !toQ) {
+        setStatus('Please enter both From and To addresses.', 'text-yellow-400');
+        return;
+      }
+      try {
+        setStatus('Geocoding...', 'text-gray-300');
+        const [startPt, endPt] = await Promise.all([geocode(fromQ), geocode(toQ)]);
+        if (!startPt) { setStatus('Could not geocode "From" address.', 'text-red-400'); return; }
+        if (!endPt)   { setStatus('Could not geocode "To" address.',   'text-red-400'); return; }
+
+        routeStart = startPt;
+        routeEnd   = endPt;
+
+        setStatus('Planning route...', 'text-gray-300');
+        const res  = await fetch('/api/route/plan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ start: startPt, end: endPt, mode: currentMode }),
+        });
+        const data = await res.json();
+        drawRoute(data);
+        setStatus('Route planned.', 'text-green-400');
+      } catch (err) {
+        console.error('planRoute failed:', err);
+        setStatus('Route planning failed.', 'text-red-400');
+      }
+    });
+
+    // ------------------------------------------------------------------ //
+    //  GPX / GeoJSON upload                                               //
+    // ------------------------------------------------------------------ //
+    document.getElementById('fileUpload').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        setStatus('Uploading route...', 'text-gray-300');
+        const res  = await fetch('/api/route/upload', { method: 'POST', body: formData });
+        const data = await res.json();
+        drawRoute(data);
+        setStatus('Route loaded from file.', 'text-green-400');
+      } catch (err) {
+        console.error('upload failed:', err);
+        setStatus('File upload failed.', 'text-red-400');
+      }
+      e.target.value = '';
+    });
+
+    // ------------------------------------------------------------------ //
+    //  Draw route on map                                                   //
+    // ------------------------------------------------------------------ //
+    function drawRoute(data) {
+      // Clear existing route layers
+      if (routePolyline) { map.removeLayer(routePolyline); routePolyline = null; }
+      signalMarkers.forEach(m => map.removeLayer(m));
+      signalMarkers = [];
+
+      if (!data) return;
+
+      const coords = data.coordinates || data.path || [];
+      if (coords.length > 0) {
+        const latLngs = coords.map(c => Array.isArray(c) ? [c[0], c[1]] : [c.lat, c.lng]);
+        routePolyline = L.polyline(latLngs, { color: '#3b82f6', weight: 4, opacity: 0.85 }).addTo(map);
+        map.fitBounds(routePolyline.getBounds(), { padding: [30, 30] });
+      }
+
+      const signals = data.traffic_signals || [];
+      signals.forEach(sig => {
+        const ll = Array.isArray(sig) ? [sig[0], sig[1]] : [sig.lat, sig.lng];
+        const m = L.circleMarker(ll, {
+          radius: 5, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.9, weight: 1,
+        }).addTo(map);
+        signalMarkers.push(m);
+      });
+    }
+
+    // ------------------------------------------------------------------ //
+    //  Position marker & trail                                             //
+    // ------------------------------------------------------------------ //
+    function updatePosMarker(lat, lng) {
+      if (!posMarker) {
+        posMarker = L.marker([lat, lng], { icon: posIcon, zIndexOffset: 1000 }).addTo(map);
+      } else {
+        posMarker.setLatLng([lat, lng]);
+      }
+
+      trailPositions.push([lat, lng]);
+      if (trailPositions.length > 200) trailPositions.shift();
+
+      if (!trailPolyline) {
+        trailPolyline = L.polyline(trailPositions, { color: '#3b82f6', weight: 2, opacity: 0.4 }).addTo(map);
+      } else {
+        trailPolyline.setLatLngs(trailPositions);
+      }
+    }
+
+    // ------------------------------------------------------------------ //
+    //  Status bar                                                          //
+    // ------------------------------------------------------------------ //
+    const STATUS_COLORS = {
+      moving:        'text-green-400',
+      accelerating:  'text-blue-400',
+      decelerating:  'text-yellow-400',
+      stopped:       'text-red-400',
+      idle:          'text-gray-400',
+      paused:        'text-gray-400',
+      completed:     'text-purple-400',
+    };
+
+    function setStatus(msg, colorClass) {
+      const el = document.getElementById('statusText');
+      el.textContent = msg;
+      el.className = 'font-medium ' + (colorClass || 'text-gray-300');
+    }
+
+    function updateStatusBar(data) {
+      const statusEl = document.getElementById('statusText');
+      const speedEl  = document.getElementById('statusSpeed');
+      const distEl   = document.getElementById('statusDist');
+      const etaEl    = document.getElementById('statusEta');
+
+      const st = (data.status || 'idle').toLowerCase();
+      statusEl.textContent = st.replace(/_/g, ' ');
+      statusEl.className   = 'font-medium ' + (STATUS_COLORS[st] || 'text-gray-300');
+
+      if (data.speed_kmh !== undefined) {
+        speedEl.textContent = parseFloat(data.speed_kmh).toFixed(1) + ' km/h';
+        speedEl.classList.remove('hidden');
+      }
+
+      const traveled   = data.distance_traveled_m;
+      const remaining  = data.distance_remaining_m;
+      if (traveled !== undefined && remaining !== undefined) {
+        const totalKm    = ((traveled + remaining) / 1000).toFixed(1);
+        const travKm     = (traveled / 1000).toFixed(1);
+        distEl.textContent = travKm + '/' + totalKm + ' km';
+        distEl.classList.remove('hidden');
+      }
+
+      if (data.eta_seconds !== undefined) {
+        const mins = Math.floor(data.eta_seconds / 60);
+        const secs = String(Math.floor(data.eta_seconds % 60)).padStart(2, '0');
+        etaEl.textContent = 'ETA ' + mins + ':' + secs;
+        etaEl.classList.remove('hidden');
+      }
+    }
+
+    // ------------------------------------------------------------------ //
+    //  WebSocket                                                           //
+    // ------------------------------------------------------------------ //
+    let ws = null;
+
+    function connectWS() {
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(proto + '//' + location.host + '/ws');
+
+      ws.addEventListener('message', (event) => {
+        let msg;
+        try { msg = JSON.parse(event.data); } catch (_) { return; }
+        if (msg.type === 'simulation_state' && msg.data) {
+          const d = msg.data;
+          if (d.lat !== undefined && d.lng !== undefined) {
+            updatePosMarker(d.lat, d.lng);
+          }
+          updateStatusBar(d);
+        }
+      });
+
+      ws.addEventListener('close', () => {
+        setTimeout(connectWS, 2000);
+      });
+
+      ws.addEventListener('error', () => {
+        ws.close();
+      });
+    }
+
+    connectWS();
+
+    // ------------------------------------------------------------------ //
+    //  Simulation controls                                                 //
+    // ------------------------------------------------------------------ //
+    function getSimParams() {
+      return {
+        mode:                   currentMode,
+        base_speed_kmh:         parseFloat(document.getElementById('speedSlider').value),
+        acceleration:           parseFloat(document.getElementById('accelSlider').value),
+        deceleration:           parseFloat(document.getElementById('decelSlider').value),
+        jitter_meters:          parseFloat(document.getElementById('jitterSlider').value),
+        stationary_drift_meters:parseFloat(document.getElementById('driftSlider').value),
+        speed_variation_pct:    parseFloat(document.getElementById('varSlider').value),
+        stop_probability:       parseFloat(document.getElementById('stopChanceSlider').value) / 100,
+        stop_duration_range: [
+          parseInt(document.getElementById('stopMinSlider').value, 10),
+          parseInt(document.getElementById('stopMaxSlider').value, 10),
+        ],
+      };
+    }
+
+    document.getElementById('startBtn').addEventListener('click', async () => {
+      try {
+        await fetch('/api/simulation/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(getSimParams()),
+        });
+        setStatus('Starting...', 'text-green-400');
+      } catch (err) {
+        console.error('sim start failed:', err);
+      }
+    });
+
+    document.getElementById('pauseBtn').addEventListener('click', async () => {
+      try {
+        await fetch('/api/simulation/pause', { method: 'POST' });
+        setStatus('Paused', 'text-gray-400');
+      } catch (err) {
+        console.error('sim pause failed:', err);
+      }
+    });
+
+    document.getElementById('stopBtn').addEventListener('click', async () => {
+      try {
+        await fetch('/api/simulation/stop', { method: 'POST' });
+        setStatus('Stopped', 'text-red-400');
+        document.getElementById('statusSpeed').classList.add('hidden');
+        document.getElementById('statusDist').classList.add('hidden');
+        document.getElementById('statusEta').classList.add('hidden');
+        // Clear trail
+        trailPositions.length = 0;
+        if (trailPolyline) { map.removeLayer(trailPolyline); trailPolyline = null; }
+      } catch (err) {
+        console.error('sim stop failed:', err);
+      }
+    });
+
+    // Apply initial preset
+    applyPreset('driving');
+
+  })();
+  </script>
+</body>
+</html>
