@@ -195,6 +195,11 @@ async def api_simulation_start(body: dict):
 
     _stop_static_location()
 
+    # Prevent duplicate simulations — stop any existing engine first
+    if motion_engine is not None:
+        await motion_engine.stop()
+        motion_engine = None
+
     config = SimulationConfig(**body)
     motion_engine = MotionEngine(current_route, config)
 

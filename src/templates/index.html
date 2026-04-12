@@ -876,6 +876,8 @@
       el.className = 'font-medium ' + (colorClass || 'text-gray-300');
     }
 
+    let currentSimStatus = 'idle';
+
     function updateStatusBar(data) {
       const statusEl = document.getElementById('statusText');
       const speedEl  = document.getElementById('statusSpeed');
@@ -883,6 +885,7 @@
       const etaEl    = document.getElementById('statusEta');
 
       const st = (data.status || 'idle').toLowerCase();
+      currentSimStatus = st;
       statusEl.textContent = STATUS_TEXT[st] || st.replace(/_/g, ' ');
       statusEl.className   = 'font-medium ' + (STATUS_COLORS[st] || 'text-gray-300');
 
@@ -963,12 +966,17 @@
 
     document.getElementById('startBtn').addEventListener('click', async () => {
       try {
-        await fetch('/api/simulation/start', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(getSimParams()),
-        });
-        setStatus('啟動中...', 'text-green-400');
+        if (currentSimStatus === 'paused') {
+          await fetch('/api/simulation/resume', { method: 'POST' });
+          setStatus('繼續中...', 'text-green-400');
+        } else {
+          await fetch('/api/simulation/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(getSimParams()),
+          });
+          setStatus('啟動中...', 'text-green-400');
+        }
       } catch (err) {
         console.error('sim start failed:', err);
       }
