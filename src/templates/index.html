@@ -785,7 +785,10 @@
         const data = await res.json();
         if (data.error) { setStatus(data.error, 'text-red-400'); return; }
         drawRoute(data);
-        setStatus('路線已規劃（' + (data.distance / 1000).toFixed(1) + ' km）', 'text-green-400');
+        routeVersion++;
+        const hint = (currentSimStatus !== 'idle' && currentSimStatus !== 'completed')
+          ? '（按開始套用新路線）' : '';
+        setStatus('路線已規劃（' + (data.distance / 1000).toFixed(1) + ' km）' + hint, 'text-green-400');
       } catch (err) {
         console.error('planRoute failed:', err);
         setStatus('路線規劃失敗', 'text-red-400');
@@ -805,6 +808,7 @@
         const res  = await fetch('/api/route/upload', { method: 'POST', body: formData });
         const data = await res.json();
         drawRoute(data);
+        routeVersion++;
         setStatus('已載入路線檔案', 'text-green-400');
       } catch (err) {
         console.error('upload failed:', err);
@@ -895,6 +899,8 @@
 
     let currentSimStatus = 'idle';
     let lastSimPosition = null;  // {lat, lng} — last known simulated position
+    let routeVersion = 0;        // increments each time a new route is planned
+    let startedRouteVersion = -1; // which routeVersion the current simulation uses
 
     function updateStatusBar(data) {
       if (data.lat !== undefined && data.lng !== undefined) {
@@ -987,7 +993,8 @@
 
     document.getElementById('startBtn').addEventListener('click', async () => {
       try {
-        if (currentSimStatus === 'paused') {
+        const routeUnchanged = (routeVersion === startedRouteVersion);
+        if (currentSimStatus === 'paused' && routeUnchanged) {
           await fetch('/api/simulation/resume', { method: 'POST' });
           setStatus('繼續中...', 'text-green-400');
         } else {
@@ -996,6 +1003,7 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(getSimParams()),
           });
+          startedRouteVersion = routeVersion;
           setStatus('啟動中...', 'text-green-400');
         }
       } catch (err) {
