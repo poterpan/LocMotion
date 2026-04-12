@@ -52,6 +52,7 @@ app = FastAPI(lifespan=lifespan)
 # --- WebSocket broadcast ---
 
 async def broadcast_state(state: SimulationState):
+    global ws_clients
     msg = json.dumps({"type": "simulation_state", "data": state.model_dump()})
     dead = set()
     for ws in ws_clients:

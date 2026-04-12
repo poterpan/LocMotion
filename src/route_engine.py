@@ -77,9 +77,13 @@ class RouteEngine:
             f"({bbox['south']},{bbox['west']},{bbox['north']},{bbox['east']});"
             f"out body;"
         )
-        resp = await self._client.get(OVERPASS_BASE, params={"data": query})
-        resp.raise_for_status()
-        elements = resp.json().get("elements", [])
+        try:
+            resp = await self._client.get(OVERPASS_BASE, params={"data": query})
+            resp.raise_for_status()
+            elements = resp.json().get("elements", [])
+        except Exception as e:
+            logger.warning(f"Overpass API failed, skipping traffic signals: {e}")
+            return []
 
         stops: list[StopPoint] = []
         for el in elements:

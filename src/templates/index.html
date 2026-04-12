@@ -267,6 +267,10 @@
             class="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs py-1 rounded border border-gray-600 transition-colors">
             清除軌跡
           </button>
+          <button id="clearRouteBtn"
+            class="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs py-1 rounded border border-gray-600 transition-colors">
+            清除路線
+          </button>
         </div>
       </section>
 
@@ -432,9 +436,17 @@
       });
     }
 
+    let _clickTimer = null;
     map.on('click', (e) => {
-      routePoints.push({ lat: e.latlng.lat, lng: e.latlng.lng });
-      refreshPointMarkers();
+      // Delay to distinguish from double-click
+      _clickTimer = setTimeout(() => {
+        routePoints.push({ lat: e.latlng.lat, lng: e.latlng.lng });
+        refreshPointMarkers();
+      }, 250);
+    });
+    map.on('dblclick', () => {
+      // Cancel the pending single-click waypoint add
+      if (_clickTimer) { clearTimeout(_clickTimer); _clickTimer = null; }
     });
 
     // ------------------------------------------------------------------ //
@@ -928,7 +940,7 @@
         deceleration:           parseFloat(document.getElementById('decelSlider').value),
         jitter_meters:          parseFloat(document.getElementById('jitterSlider').value),
         stationary_drift_meters:parseFloat(document.getElementById('driftSlider').value),
-        speed_variation_pct:    parseFloat(document.getElementById('varSlider').value),
+        speed_variation_pct:    parseFloat(document.getElementById('varSlider').value) / 100,
         stop_probability:       parseFloat(document.getElementById('stopChanceSlider').value) / 100,
         stop_duration_range: [
           parseInt(document.getElementById('stopMinSlider').value, 10),
@@ -978,6 +990,14 @@
     document.getElementById('clearTrailBtn').addEventListener('click', () => {
       trailPositions.length = 0;
       if (trailPolyline) { map.removeLayer(trailPolyline); trailPolyline = null; }
+    });
+
+    document.getElementById('clearRouteBtn').addEventListener('click', () => {
+      if (routePolyline) { map.removeLayer(routePolyline); routePolyline = null; }
+      signalMarkers.forEach(m => map.removeLayer(m));
+      signalMarkers = [];
+      routePoints.length = 0;
+      refreshPointMarkers();
     });
 
     // Apply initial preset
