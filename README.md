@@ -101,10 +101,13 @@ FastAPI Backend
 
 ## 鳴謝
 
-- **[GeoPort](https://github.com/davesc63/GeoPort)**：裝置連線邏輯的原型來源
+- **[GeoPort](https://github.com/davesc63/GeoPort)**（GPL-3.0）：裝置連線邏輯的原型來源。LocMotion 的 `device_manager.py` 採用了 GeoPort 的 tunnel 選擇與 DVT session 管理流程。
 - **[pymobiledevice3](https://github.com/doronz88/pymobiledevice3)**：核心 iOS 通訊函式庫
 - **OpenStreetMap**：路線規劃、地址搜尋、紅綠燈資料
+  - [OSRM](http://project-osrm.org/)（路線）
+  - [Overpass API](https://overpass-api.de/)（紅綠燈）
+  - [Nominatim](https://nominatim.openstreetmap.org/)（地址搜尋）
 
 ## License
 
-MIT
+LocMotion 使用 **GPL-3.0** 授權，因為借鑑了 GeoPort 的裝置連線邏輯（GeoPort 本身是 GPL-3.0）。完整授權條款見 [LICENSE](LICENSE)。
