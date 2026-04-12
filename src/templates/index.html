@@ -994,6 +994,7 @@
     document.getElementById('stopBtn').addEventListener('click', async () => {
       try {
         await fetch('/api/simulation/stop', { method: 'POST' });
+        currentSimStatus = 'idle';
         setStatus('已停止', 'text-red-400');
         document.getElementById('statusSpeed').classList.add('hidden');
         document.getElementById('statusDist').classList.add('hidden');
