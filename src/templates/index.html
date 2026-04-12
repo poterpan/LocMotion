@@ -366,12 +366,19 @@
     });
     map.addControl(new SearchControl({ position: 'topleft' }));
 
-    // Current position marker (blue circle)
+    // Active position marker (blue circle) — device is being simulated here
     const posIcon = L.divIcon({
       className: '',
       html: '<div style="width:14px;height:14px;background:#3b82f6;border:2px solid #fff;border-radius:50%;box-shadow:0 0 6px rgba(59,130,246,.7)"></div>',
       iconSize: [14, 14],
       iconAnchor: [7, 7],
+    });
+    // Inactive position marker (gray) — last known simulated position, no longer active
+    const posIconInactive = L.divIcon({
+      className: '',
+      html: '<div style="width:12px;height:12px;background:#6b7280;border:2px solid #9ca3af;border-radius:50%;opacity:0.7"></div>',
+      iconSize: [12, 12],
+      iconAnchor: [6, 6],
     });
     let posMarker = null;
 
@@ -544,6 +551,7 @@
         } catch (_) {}
         connected = false;
         isInjectionActive = false;
+        if (posMarker) { map.removeLayer(posMarker); posMarker = null; }
         connectBtn.textContent = '連線';
         connectBtn.classList.replace('bg-red-600', 'bg-blue-600');
         connectBtn.classList.replace('hover:bg-red-700', 'hover:bg-blue-700');
@@ -894,6 +902,7 @@
         posMarker = L.marker([lat, lng], { icon: posIcon, zIndexOffset: 1000 }).addTo(map);
       } else {
         posMarker.setLatLng([lat, lng]);
+        posMarker.setIcon(posIcon);  // ensure active (blue) icon
       }
 
       trailPositions.push([lat, lng]);
@@ -1108,8 +1117,8 @@
         // Clear trail
         trailPositions.length = 0;
         if (trailPolyline) { map.removeLayer(trailPolyline); trailPolyline = null; }
-        // Remove position marker — device is no longer at that location
-        if (posMarker) { map.removeLayer(posMarker); posMarker = null; }
+        // Fade position marker to gray — device is no longer being simulated here
+        if (posMarker) posMarker.setIcon(posIconInactive);
       } catch (err) {
         console.error('sim stop failed:', err);
       }
