@@ -351,12 +351,9 @@
     // ------------------------------------------------------------------ //
     map.doubleClickZoom.disable();
     let _clickTimer = null;
-    let _dblClicked = false;
 
     map.on('dblclick', async (e) => {
-      _dblClicked = true;
       if (_clickTimer) { clearTimeout(_clickTimer); _clickTimer = null; }
-      setTimeout(() => { _dblClicked = false; }, 100);
       if (!connected) return;
       const { lat, lng } = e.latlng;
       trailPositions.length = 0;
@@ -440,12 +437,13 @@
     }
 
     map.on('click', (e) => {
-      if (_dblClicked) return;
+      // Queue waypoint add; dblclick handler cancels this if it fires
+      if (_clickTimer) clearTimeout(_clickTimer);
       _clickTimer = setTimeout(() => {
-        if (_dblClicked) return;
+        _clickTimer = null;
         routePoints.push({ lat: e.latlng.lat, lng: e.latlng.lng });
         refreshPointMarkers();
-      }, 350);
+      }, 500);
     });
 
     // ------------------------------------------------------------------ //
