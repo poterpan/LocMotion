@@ -287,6 +287,39 @@
     <span id="statusEta"   class="text-gray-400 hidden"></span>
   </footer>
 
+  <!-- ===== CONFIRM MODAL ===== -->
+  <div id="confirmModal"
+    class="hidden fixed inset-0 z-[10000] flex items-center justify-center"
+    style="background: rgba(0,0,0,0.6); backdrop-filter: blur(3px);">
+    <div class="bg-gray-800 border border-gray-700 rounded-lg shadow-2xl w-96 max-w-full mx-4">
+      <div class="p-5">
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-10 h-10 rounded-full bg-yellow-900 flex items-center justify-center flex-shrink-0">
+            <svg class="w-6 h-6 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h3 id="confirmTitle" class="text-lg font-semibold text-gray-100">確認停止模擬</h3>
+        </div>
+        <p id="confirmMessage" class="text-sm text-gray-300 leading-relaxed mb-4">
+          停止後，手機定位會<span class="text-red-400 font-medium">立即瞬移回到真實位置</span>。<br><br>
+          建議先<span class="text-yellow-400 font-medium">關閉測試 App</span> 再停止模擬，以避免定位瞬移被偵測為異常行為。
+        </p>
+        <div class="flex gap-2 justify-end">
+          <button id="confirmCancelBtn"
+            class="px-4 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 text-gray-200 rounded transition-colors">
+            取消
+          </button>
+          <button id="confirmOkBtn"
+            class="px-4 py-1.5 text-sm bg-red-600 hover:bg-red-700 text-white font-medium rounded transition-colors">
+            確認停止
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ===== JAVASCRIPT ===== -->
   <script>
   (() => {
@@ -1020,7 +1053,43 @@
       }
     });
 
+    // ------------------------------------------------------------------ //
+    //  Confirm modal                                                       //
+    // ------------------------------------------------------------------ //
+    function showConfirm() {
+      return new Promise((resolve) => {
+        const modal = document.getElementById('confirmModal');
+        const okBtn = document.getElementById('confirmOkBtn');
+        const cancelBtn = document.getElementById('confirmCancelBtn');
+
+        const close = (result) => {
+          modal.classList.add('hidden');
+          okBtn.removeEventListener('click', onOk);
+          cancelBtn.removeEventListener('click', onCancel);
+          modal.removeEventListener('click', onBackdrop);
+          document.removeEventListener('keydown', onKey);
+          resolve(result);
+        };
+        const onOk = () => close(true);
+        const onCancel = () => close(false);
+        const onBackdrop = (e) => { if (e.target === modal) close(false); };
+        const onKey = (e) => { if (e.key === 'Escape') close(false); };
+
+        okBtn.addEventListener('click', onOk);
+        cancelBtn.addEventListener('click', onCancel);
+        modal.addEventListener('click', onBackdrop);
+        document.addEventListener('keydown', onKey);
+        modal.classList.remove('hidden');
+      });
+    }
+
     document.getElementById('stopBtn').addEventListener('click', async () => {
+      // Only prompt if something is actually running
+      const active = connected && currentSimStatus !== 'idle';
+      if (active) {
+        const ok = await showConfirm();
+        if (!ok) return;
+      }
       try {
         await fetch('/api/simulation/stop', { method: 'POST' });
         currentSimStatus = 'idle';
