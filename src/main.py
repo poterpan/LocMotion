@@ -278,6 +278,12 @@ async def api_geocode(q: str):
     return [r.model_dump() for r in results]
 
 
+@app.get("/api/geocode/search")
+async def api_geocode_search(q: str):
+    """Geocode with display names for autocomplete."""
+    return await route_engine.geocode_search(q)
+
+
 # --- Entry point ---
 
 if __name__ == "__main__":

@@ -134,6 +134,19 @@ class RouteEngine:
             for r in resp.json()
         ]
 
+    async def geocode_search(self, query: str) -> list[dict]:
+        """Geocode with display names for autocomplete UI."""
+        resp = await self._client.get(
+            f"{NOMINATIM_BASE}/search",
+            params={"q": query, "format": "json", "limit": 5},
+        )
+        resp.raise_for_status()
+        return [
+            {"lat": float(r["lat"]), "lng": float(r["lon"]),
+             "display_name": r.get("display_name", "")}
+            for r in resp.json()
+        ]
+
     def _route_bbox(self, route: Route, buffer_m: float = 50) -> dict:
         lats = [p.lat for p in route.polyline]
         lngs = [p.lng for p in route.polyline]

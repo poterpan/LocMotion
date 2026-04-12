@@ -23,6 +23,29 @@
     .mode-btn.active { background-color: #2563eb; color: white; }
     /* Disabled button */
     button:disabled { opacity: 0.5; cursor: not-allowed; }
+    /* Autocomplete dropdown */
+    .autocomplete-list {
+      position: absolute; z-index: 9999;
+      background: #1f2937; border: 1px solid #374151;
+      border-radius: 4px; max-height: 180px; overflow-y: auto;
+      width: 100%; box-shadow: 0 4px 12px rgba(0,0,0,.4);
+    }
+    .autocomplete-list div {
+      padding: 6px 8px; font-size: 0.8rem; color: #d1d5db;
+      cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .autocomplete-list div:hover { background: #374151; }
+    /* Map search control */
+    .map-search {
+      background: #1f2937; border: 1px solid #374151; border-radius: 6px;
+      padding: 6px 10px; display: flex; gap: 6px; align-items: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,.4); position: relative;
+    }
+    .map-search input {
+      background: transparent; border: none; outline: none; color: #e5e7eb;
+      font-size: 0.85rem; width: 220px;
+    }
+    .map-search input::placeholder { color: #6b7280; }
   </style>
 </head>
 <body class="bg-gray-900 text-gray-100 flex flex-col" style="height:100vh;overflow:hidden;">
@@ -60,10 +83,16 @@
       <section>
         <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Route</h2>
 
-        <input id="fromInput" type="text" placeholder="From address"
-          class="w-full bg-gray-700 border border-gray-600 text-gray-100 text-sm rounded px-2 py-1 mb-1 focus:outline-none focus:ring-1 focus:ring-blue-500" />
-        <input id="toInput" type="text" placeholder="To address"
-          class="w-full bg-gray-700 border border-gray-600 text-gray-100 text-sm rounded px-2 py-1 mb-2 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+        <div class="relative mb-1">
+          <input id="fromInput" type="text" placeholder="From (search address or place)"
+            class="w-full bg-gray-700 border border-gray-600 text-gray-100 text-sm rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500" autocomplete="off" />
+          <div id="fromDropdown" class="autocomplete-list hidden"></div>
+        </div>
+        <div class="relative mb-2">
+          <input id="toInput" type="text" placeholder="To (search address or place)"
+            class="w-full bg-gray-700 border border-gray-600 text-gray-100 text-sm rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500" autocomplete="off" />
+          <div id="toDropdown" class="autocomplete-list hidden"></div>
+        </div>
 
         <!-- Mode Buttons -->
         <div class="flex gap-1 mb-2">
@@ -240,6 +269,37 @@
       maxZoom: 19,
     }).addTo(map);
 
+    // Geolocate on init — center map on user's real position
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => map.setView([pos.coords.latitude, pos.coords.longitude], 15),
+        () => {},  // silently keep default if denied
+        { enableHighAccuracy: false, timeout: 5000 }
+      );
+    }
+
+    // --- Map search control (top-left) ---
+    const SearchControl = L.Control.extend({
+      onAdd() {
+        const container = L.DomUtil.create('div', 'map-search');
+        L.DomEvent.disableClickPropagation(container);
+        L.DomEvent.disableScrollPropagation(container);
+        const input = L.DomUtil.create('input', '', container);
+        input.type = 'text';
+        input.placeholder = 'Search place...';
+        input.id = 'mapSearchInput';
+        const dropdown = L.DomUtil.create('div', 'autocomplete-list hidden', container);
+        dropdown.id = 'mapSearchDropdown';
+        dropdown.style.position = 'absolute';
+        dropdown.style.top = '100%';
+        dropdown.style.left = '0';
+        dropdown.style.width = '100%';
+        dropdown.style.marginTop = '4px';
+        return container;
+      },
+    });
+    map.addControl(new SearchControl({ position: 'topleft' }));
+
     // Current position marker (blue circle)
     const posIcon = L.divIcon({
       className: '',
@@ -415,33 +475,143 @@
     bindSlider('stopMaxSlider',    'stopMaxVal',    v => Math.round(v));
 
     // ------------------------------------------------------------------ //
+    //  Geocode helper + autocomplete                                       //
+    // ------------------------------------------------------------------ //
+    let _acTimers = {};
+    // Stored selected coords: { fromInput: {lat,lng}, toInput: {lat,lng} }
+    const selectedCoords = {};
+
+    async function geocodeAll(query) {
+      const res  = await fetch('/api/geocode?q=' + encodeURIComponent(query));
+      return await res.json();  // [{lat, lng}, ...]
+    }
+
+    // Nominatim returns lat/lng; we also need display names, so we call Nominatim
+    // directly for autocomplete (with display_name). Backend /api/geocode only returns coords.
+    // Let's extend backend or just use the backend. For simplicity, we fetch full results:
+    async function geocodeWithNames(query) {
+      const res = await fetch('/api/geocode/search?q=' + encodeURIComponent(query));
+      return await res.json();  // [{lat, lng, display_name}, ...]
+    }
+
+    function setupAutocomplete(inputId, dropdownId) {
+      const input = document.getElementById(inputId);
+      const dropdown = document.getElementById(dropdownId);
+      if (!input || !dropdown) return;
+
+      input.addEventListener('input', () => {
+        clearTimeout(_acTimers[inputId]);
+        const q = input.value.trim();
+        if (q.length < 2) { dropdown.classList.add('hidden'); return; }
+        _acTimers[inputId] = setTimeout(async () => {
+          try {
+            const results = await geocodeWithNames(q);
+            while (dropdown.firstChild) dropdown.removeChild(dropdown.firstChild);
+            if (!results || results.length === 0) { dropdown.classList.add('hidden'); return; }
+            results.forEach(r => {
+              const item = document.createElement('div');
+              item.textContent = r.display_name || (r.lat.toFixed(4) + ', ' + r.lng.toFixed(4));
+              item.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                input.value = r.display_name || (r.lat.toFixed(4) + ', ' + r.lng.toFixed(4));
+                selectedCoords[inputId] = { lat: r.lat, lng: r.lng };
+                dropdown.classList.add('hidden');
+              });
+              dropdown.appendChild(item);
+            });
+            dropdown.classList.remove('hidden');
+          } catch (_) { dropdown.classList.add('hidden'); }
+        }, 350);  // debounce 350ms
+      });
+
+      input.addEventListener('blur', () => {
+        setTimeout(() => dropdown.classList.add('hidden'), 200);
+      });
+
+      input.addEventListener('focus', () => {
+        if (dropdown.childElementCount > 0) dropdown.classList.remove('hidden');
+      });
+    }
+
+    setupAutocomplete('fromInput', 'fromDropdown');
+    setupAutocomplete('toInput', 'toDropdown');
+    setupAutocomplete('mapSearchInput', 'mapSearchDropdown');
+
+    // Map search: on select, fly to location and place marker
+    const mapSearchInput = document.getElementById('mapSearchInput');
+    const mapSearchDropdown = document.getElementById('mapSearchDropdown');
+    if (mapSearchInput) {
+      const origSetup = mapSearchInput;
+      // Override the mousedown in map search to fly to location
+      const observer = new MutationObserver(() => {
+        // Items are added dynamically; we handle selection via setupAutocomplete
+      });
+      // Override: when a coord is selected for mapSearchInput, fly there
+      mapSearchInput.addEventListener('input', () => {
+        // Clear selected coord when typing new text
+        delete selectedCoords['mapSearchInput'];
+      });
+      // Poll for selection (set by setupAutocomplete mousedown handler)
+      mapSearchInput.addEventListener('blur', () => {
+        setTimeout(() => {
+          const coord = selectedCoords['mapSearchInput'];
+          if (coord) {
+            map.flyTo([coord.lat, coord.lng], 16);
+            updatePosMarker(coord.lat, coord.lng);
+            delete selectedCoords['mapSearchInput'];
+          }
+        }, 250);
+      });
+      // Also handle Enter key
+      mapSearchInput.addEventListener('keydown', async (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          mapSearchDropdown.classList.add('hidden');
+          const q = mapSearchInput.value.trim();
+          if (!q) return;
+          const coord = selectedCoords['mapSearchInput'];
+          if (coord) {
+            map.flyTo([coord.lat, coord.lng], 16);
+            updatePosMarker(coord.lat, coord.lng);
+          } else {
+            // No selection from dropdown, geocode directly
+            const results = await geocodeWithNames(q);
+            if (results && results.length > 0) {
+              map.flyTo([results[0].lat, results[0].lng], 16);
+              updatePosMarker(results[0].lat, results[0].lng);
+              mapSearchInput.value = results[0].display_name || q;
+            }
+          }
+        }
+      });
+    }
+
+    // ------------------------------------------------------------------ //
     //  Route planning                                                      //
     // ------------------------------------------------------------------ //
-    let routeStart = null;
-    let routeEnd   = null;
-
-    async function geocode(query) {
-      const res  = await fetch('/api/geocode?q=' + encodeURIComponent(query));
-      const list = await res.json();
-      if (list && list.length > 0) return list[0];
-      return null;
-    }
 
     document.getElementById('planRouteBtn').addEventListener('click', async () => {
       const fromQ = document.getElementById('fromInput').value.trim();
       const toQ   = document.getElementById('toInput').value.trim();
       if (!fromQ || !toQ) {
-        setStatus('Please enter both From and To addresses.', 'text-yellow-400');
+        setStatus('Please enter both From and To.', 'text-yellow-400');
         return;
       }
       try {
         setStatus('Geocoding...', 'text-gray-300');
-        const [startPt, endPt] = await Promise.all([geocode(fromQ), geocode(toQ)]);
-        if (!startPt) { setStatus('Could not geocode "From" address.', 'text-red-400'); return; }
-        if (!endPt)   { setStatus('Could not geocode "To" address.',   'text-red-400'); return; }
-
-        routeStart = startPt;
-        routeEnd   = endPt;
+        // Use pre-selected coords if available, otherwise geocode
+        let startPt = selectedCoords['fromInput'];
+        let endPt   = selectedCoords['toInput'];
+        if (!startPt) {
+          const r = await geocodeAll(fromQ);
+          startPt = r && r.length > 0 ? r[0] : null;
+        }
+        if (!endPt) {
+          const r = await geocodeAll(toQ);
+          endPt = r && r.length > 0 ? r[0] : null;
+        }
+        if (!startPt) { setStatus('Could not find "From" location.', 'text-red-400'); return; }
+        if (!endPt)   { setStatus('Could not find "To" location.',   'text-red-400'); return; }
 
         setStatus('Planning route...', 'text-gray-300');
         const res  = await fetch('/api/route/plan', {
@@ -487,20 +657,23 @@
       if (routePolyline) { map.removeLayer(routePolyline); routePolyline = null; }
       signalMarkers.forEach(m => map.removeLayer(m));
       signalMarkers = [];
+      trailPositions.length = 0;
+      if (trailPolyline) { map.removeLayer(trailPolyline); trailPolyline = null; }
 
       if (!data) return;
 
-      const coords = data.coordinates || data.path || [];
-      if (coords.length > 0) {
-        const latLngs = coords.map(c => Array.isArray(c) ? [c[0], c[1]] : [c.lat, c.lng]);
+      // API returns { polyline: [{lat,lng}], stop_points: [{position:{lat,lng}}], ... }
+      const poly = data.polyline || [];
+      if (poly.length > 0) {
+        const latLngs = poly.map(p => [p.lat, p.lng]);
         routePolyline = L.polyline(latLngs, { color: '#3b82f6', weight: 4, opacity: 0.85 }).addTo(map);
         map.fitBounds(routePolyline.getBounds(), { padding: [30, 30] });
       }
 
-      const signals = data.traffic_signals || [];
-      signals.forEach(sig => {
-        const ll = Array.isArray(sig) ? [sig[0], sig[1]] : [sig.lat, sig.lng];
-        const m = L.circleMarker(ll, {
+      const stops = data.stop_points || [];
+      stops.forEach(sp => {
+        const pos = sp.position || sp;
+        const m = L.circleMarker([pos.lat, pos.lng], {
           radius: 5, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.9, weight: 1,
         }).addTo(map);
         signalMarkers.push(m);
