@@ -105,6 +105,12 @@ async def api_connect_device(body: dict):
 
 @app.post("/api/devices/disconnect")
 async def api_disconnect_device():
+    global motion_engine
+    _stop_static_location()
+    if motion_engine:
+        await motion_engine.stop()
+        motion_engine = None
+    await device_mgr.clear_location()
     conns = list(device_mgr._connections.keys())
     for udid in conns:
         await device_mgr.disconnect(udid)
@@ -208,6 +214,7 @@ async def api_simulation_resume():
 @app.post("/api/simulation/stop")
 async def api_simulation_stop():
     global motion_engine
+    _stop_static_location()
     if motion_engine:
         await motion_engine.stop()
         motion_engine = None

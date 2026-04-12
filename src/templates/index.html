@@ -263,10 +263,6 @@
           </button>
         </div>
         <div class="flex gap-1 mt-1">
-          <button id="clearTrailBtn"
-            class="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs py-1 rounded border border-gray-600 transition-colors">
-            清除軌跡
-          </button>
           <button id="clearRouteBtn"
             class="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs py-1 rounded border border-gray-600 transition-colors">
             清除路線
@@ -360,6 +356,8 @@
     map.on('dblclick', async (e) => {
       _dblClicked = true;
       if (_clickTimer) { clearTimeout(_clickTimer); _clickTimer = null; }
+      setTimeout(() => { _dblClicked = false; }, 100);
+      if (!connected) return;
       const { lat, lng } = e.latlng;
       trailPositions.length = 0;
       if (trailPolyline) { map.removeLayer(trailPolyline); trailPolyline = null; }
@@ -373,7 +371,6 @@
       } catch (err) {
         console.error('location/set failed:', err);
       }
-      setTimeout(() => { _dblClicked = false; }, 100);
     });
 
     // ------------------------------------------------------------------ //
@@ -987,11 +984,6 @@
       } catch (err) {
         console.error('sim stop failed:', err);
       }
-    });
-
-    document.getElementById('clearTrailBtn').addEventListener('click', () => {
-      trailPositions.length = 0;
-      if (trailPolyline) { map.removeLayer(trailPolyline); trailPolyline = null; }
     });
 
     document.getElementById('clearRouteBtn').addEventListener('click', () => {
