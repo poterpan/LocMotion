@@ -30,12 +30,13 @@ class RouteEngine:
     async def plan_route(
         self, start: LatLng, end: LatLng,
         mode: str = "driving",
+        waypoints: list[LatLng] | None = None,
     ) -> Route:
         profile = _OSRM_PROFILES.get(mode, "car")
-        url = (
-            f"{OSRM_BASE}/route/v1/{profile}/"
-            f"{start.lng},{start.lat};{end.lng},{end.lat}"
-        )
+        # Build coordinate string: start;wp1;wp2;...;end
+        points = [start] + (waypoints or []) + [end]
+        coords_str = ";".join(f"{p.lng},{p.lat}" for p in points)
+        url = f"{OSRM_BASE}/route/v1/{profile}/{coords_str}"
         resp = await self._client.get(url, params={
             "overview": "full",
             "geometries": "geojson",

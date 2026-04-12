@@ -115,11 +115,25 @@ async def api_disconnect_device():
 @app.post("/api/route/plan")
 async def api_plan_route(body: dict):
     global current_route
-    start = LatLng(**body["start"])
-    end = LatLng(**body["end"])
-    mode = body.get("mode", "driving")
+    # Accept either {start, end} or {points: [{lat,lng}, ...]}
+    points_raw = body.get("points")
+    if points_raw and len(points_raw) >= 2:
+        points = [LatLng(**p) for p in points_raw]
+        start = points[0]
+        end = points[-1]
+        waypoints = points[1:-1] if len(points) > 2 else None
+    else:
+        start = LatLng(**body["start"])
+        end = LatLng(**body["end"])
+        waypoints = None
 
-    route = await route_engine.plan_route(start, end, mode)
+    # If return_to_start, append start as final destination
+    if body.get("return_to_start") and (start.lat != end.lat or start.lng != end.lng):
+        waypoints = (waypoints or []) + [end]
+        end = start
+
+    mode = body.get("mode", "driving")
+    route = await route_engine.plan_route(start, end, mode, waypoints=waypoints)
     stops = await route_engine.find_traffic_signals(route)
     route.stop_points = stops
     current_route = route

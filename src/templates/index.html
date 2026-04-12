@@ -101,10 +101,33 @@
           <button id="btnBike" class="mode-btn flex-1 bg-gray-700 hover:bg-gray-600 text-sm py-1 rounded transition-colors" data-mode="cycling">Bike</button>
         </div>
 
+        <!-- Waypoint list (populated by JS) -->
+        <div id="waypointList" class="space-y-0.5 mb-2 max-h-24 overflow-y-auto"></div>
+        <div class="flex gap-1 mb-2">
+          <button id="clearPointsBtn"
+            class="flex-1 bg-gray-700 hover:bg-gray-600 text-xs py-1 rounded border border-gray-600 transition-colors">
+            Clear Points
+          </button>
+        </div>
+
+        <p class="text-xs text-gray-500 mb-2">Click map to add points. Drag to reorder. Dbl-click = set location.</p>
+
         <button id="planRouteBtn"
-          class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-1 rounded mb-2 transition-colors">
+          class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-1 rounded mb-1 transition-colors">
           Plan Route
         </button>
+
+        <!-- Options -->
+        <div class="flex gap-3 mb-2 text-xs text-gray-400">
+          <label class="flex items-center gap-1 cursor-pointer">
+            <input id="returnToStartChk" type="checkbox" class="accent-blue-500" />
+            Return to start
+          </label>
+          <label class="flex items-center gap-1 cursor-pointer">
+            <input id="loopChk" type="checkbox" class="accent-blue-500" />
+            Loop
+          </label>
+        </div>
 
         <!-- GPX / GeoJSON Upload -->
         <label class="w-full flex items-center justify-center gap-1 bg-gray-700 hover:bg-gray-600 text-sm py-1 rounded cursor-pointer transition-colors border border-gray-600">
@@ -318,10 +341,13 @@
     let trailPolyline = null;
 
     // ------------------------------------------------------------------ //
-    //  Map click -> set static location                                    //
+    //  Map double-click -> set static location (clear trail)               //
     // ------------------------------------------------------------------ //
-    map.on('click', async (e) => {
+    map.doubleClickZoom.disable();
+    map.on('dblclick', async (e) => {
       const { lat, lng } = e.latlng;
+      trailPositions.length = 0;
+      if (trailPolyline) { map.removeLayer(trailPolyline); trailPolyline = null; }
       try {
         await fetch('/api/location/set', {
           method: 'POST',
@@ -332,6 +358,77 @@
       } catch (err) {
         console.error('location/set failed:', err);
       }
+    });
+
+    // ------------------------------------------------------------------ //
+    //  Map single-click -> add route waypoint                              //
+    // ------------------------------------------------------------------ //
+    const routePoints = [];      // [{lat, lng}]
+    const routePointMarkers = []; // L.Marker[]
+
+    function makePointIcon(index, total) {
+      const isStart = index === 0;
+      const isEnd = index === total - 1 && total > 1;
+      const color = isStart ? '#22c55e' : isEnd ? '#ef4444' : '#f59e0b';
+      const label = isStart ? 'S' : isEnd ? 'E' : String(index);
+      return L.divIcon({
+        className: '',
+        html: '<div style="width:24px;height:24px;background:' + color +
+              ';border:2px solid #fff;border-radius:50%;display:flex;align-items:center;' +
+              'justify-content:center;font-size:11px;font-weight:bold;color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.4)">' +
+              label + '</div>',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      });
+    }
+
+    function refreshPointMarkers() {
+      routePointMarkers.forEach(m => map.removeLayer(m));
+      routePointMarkers.length = 0;
+      routePoints.forEach((pt, i) => {
+        const m = L.marker([pt.lat, pt.lng], {
+          icon: makePointIcon(i, routePoints.length),
+          draggable: true,
+        }).addTo(map);
+        m.on('dragend', (e) => {
+          const pos = e.target.getLatLng();
+          routePoints[i] = { lat: pos.lat, lng: pos.lng };
+          refreshPointMarkers();
+          updateWaypointList();
+        });
+        routePointMarkers.push(m);
+      });
+      updateWaypointList();
+    }
+
+    function updateWaypointList() {
+      const container = document.getElementById('waypointList');
+      while (container.firstChild) container.removeChild(container.firstChild);
+      routePoints.forEach((pt, i) => {
+        const row = document.createElement('div');
+        row.className = 'flex items-center gap-1 text-xs text-gray-300';
+        const label = document.createElement('span');
+        const isStart = i === 0;
+        const isEnd = i === routePoints.length - 1 && routePoints.length > 1;
+        label.textContent = (isStart ? 'S' : isEnd ? 'E' : i) + ': ' +
+          pt.lat.toFixed(4) + ', ' + pt.lng.toFixed(4);
+        label.className = 'flex-1 truncate';
+        const removeBtn = document.createElement('button');
+        removeBtn.textContent = 'x';
+        removeBtn.className = 'text-red-400 hover:text-red-300 px-1';
+        removeBtn.addEventListener('click', () => {
+          routePoints.splice(i, 1);
+          refreshPointMarkers();
+        });
+        row.appendChild(label);
+        row.appendChild(removeBtn);
+        container.appendChild(row);
+      });
+    }
+
+    map.on('click', (e) => {
+      routePoints.push({ lat: e.latlng.lat, lng: e.latlng.lng });
+      refreshPointMarkers();
     });
 
     // ------------------------------------------------------------------ //
@@ -590,38 +687,59 @@
     //  Route planning                                                      //
     // ------------------------------------------------------------------ //
 
+    document.getElementById('clearPointsBtn').addEventListener('click', () => {
+      routePoints.length = 0;
+      refreshPointMarkers();
+    });
+
     document.getElementById('planRouteBtn').addEventListener('click', async () => {
       const fromQ = document.getElementById('fromInput').value.trim();
       const toQ   = document.getElementById('toInput').value.trim();
-      if (!fromQ || !toQ) {
-        setStatus('Please enter both From and To.', 'text-yellow-400');
-        return;
-      }
-      try {
+      const returnToStart = document.getElementById('returnToStartChk').checked;
+
+      // Build points list: prefer map points, fall back to text inputs
+      let points = [];
+      if (routePoints.length >= 2) {
+        points = routePoints.slice();
+      } else if (fromQ || toQ) {
+        // Geocode text inputs
         setStatus('Geocoding...', 'text-gray-300');
-        // Use pre-selected coords if available, otherwise geocode
         let startPt = selectedCoords['fromInput'];
         let endPt   = selectedCoords['toInput'];
-        if (!startPt) {
+        if (!startPt && fromQ) {
           const r = await geocodeAll(fromQ);
           startPt = r && r.length > 0 ? r[0] : null;
         }
-        if (!endPt) {
+        if (!endPt && toQ) {
           const r = await geocodeAll(toQ);
           endPt = r && r.length > 0 ? r[0] : null;
         }
-        if (!startPt) { setStatus('Could not find "From" location.', 'text-red-400'); return; }
-        if (!endPt)   { setStatus('Could not find "To" location.',   'text-red-400'); return; }
+        if (startPt) points.push(startPt);
+        // Add any map waypoints in between
+        routePoints.forEach(p => points.push(p));
+        if (endPt) points.push(endPt);
+      }
 
+      if (points.length < 2) {
+        setStatus('Need at least 2 points. Click map or enter addresses.', 'text-yellow-400');
+        return;
+      }
+
+      try {
         setStatus('Planning route...', 'text-gray-300');
-        const res  = await fetch('/api/route/plan', {
+        const res = await fetch('/api/route/plan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ start: startPt, end: endPt, mode: currentMode }),
+          body: JSON.stringify({
+            points: points,
+            mode: currentMode,
+            return_to_start: returnToStart,
+          }),
         });
         const data = await res.json();
+        if (data.error) { setStatus(data.error, 'text-red-400'); return; }
         drawRoute(data);
-        setStatus('Route planned.', 'text-green-400');
+        setStatus('Route planned (' + (data.distance / 1000).toFixed(1) + ' km).', 'text-green-400');
       } catch (err) {
         console.error('planRoute failed:', err);
         setStatus('Route planning failed.', 'text-red-400');
@@ -800,6 +918,7 @@
           parseInt(document.getElementById('stopMinSlider').value, 10),
           parseInt(document.getElementById('stopMaxSlider').value, 10),
         ],
+        loop:                   document.getElementById('loopChk').checked,
       };
     }
 

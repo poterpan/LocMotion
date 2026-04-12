@@ -74,6 +74,7 @@ class SimulationConfig:
     stop_duration_range: tuple[int, int] | None = None
     acceleration: float | None = None
     deceleration: float | None = None
+    loop: bool = False
 
     def __post_init__(self):
         defaults = _MODE_DEFAULTS[self.mode]

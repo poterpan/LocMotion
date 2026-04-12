@@ -27,6 +27,7 @@ class MotionEngine:
         self._elapsed: float = 0.0
         self._stop_timer: float = 0.0
         self._last_tick_time: float = 0.0
+        self._loop_count: int = 0
 
         self._seg_cumulative = self._compute_cumulative_distances()
 
@@ -163,9 +164,17 @@ class MotionEngine:
         self._distance_traveled += advance
 
         if self._distance_traveled >= self._route.distance:
-            self._distance_traveled = self._route.distance
-            self._current_speed_ms = 0
-            self._status = "completed"
+            if self._config.loop:
+                # Reset to start for next lap
+                self._distance_traveled = 0.0
+                self._current_speed_ms = 0.0
+                self._status = "accelerating"
+                self._loop_count += 1
+                logger.info(f"Loop #{self._loop_count} starting")
+            else:
+                self._distance_traveled = self._route.distance
+                self._current_speed_ms = 0
+                self._status = "completed"
 
     def _compute_cumulative_distances(self) -> list[float]:
         cumulative = [0.0]
