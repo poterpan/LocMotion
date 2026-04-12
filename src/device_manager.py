@@ -204,7 +204,7 @@ class DeviceManager:
             self._tunnel_task = asyncio.create_task(_run_quic())
 
         else:
-            proxy = CoreDeviceTunnelProxy(lockdown)
+            proxy = await CoreDeviceTunnelProxy.create(lockdown)
 
             async def _run_tcp():
                 nonlocal host, port

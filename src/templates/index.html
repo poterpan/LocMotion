@@ -311,17 +311,22 @@
         const selected = deviceSelect.options[deviceSelect.selectedIndex];
         if (!selected || !selected.value) return;
         try {
-          await fetch('/api/devices/connect', {
+          const resp = await fetch('/api/devices/connect', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ udid: selected.value, conn_type: selected.dataset.connType || 'usb' }),
+            body: JSON.stringify({ udid: selected.value, conn_type: selected.dataset.connType || 'USB' }),
           });
+          if (!resp.ok) {
+            const data = await resp.json().catch(() => ({}));
+            alert('Connection failed: ' + (data.error || resp.statusText));
+            return;
+          }
           connected = true;
           connectBtn.textContent = 'Disconnect';
           connectBtn.classList.replace('bg-blue-600', 'bg-red-600');
           connectBtn.classList.replace('hover:bg-blue-700', 'hover:bg-red-700');
         } catch (err) {
-          console.error('connect failed:', err);
+          alert('Connection failed: ' + err.message);
         }
       } else {
         try {
