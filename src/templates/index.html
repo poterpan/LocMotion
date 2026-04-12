@@ -1100,6 +1100,7 @@
         await fetch('/api/simulation/stop', { method: 'POST' });
         isInjectionActive = false;
         currentSimStatus = 'idle';
+        lastSimPosition = null;
         setStatus('已停止', 'text-red-400');
         document.getElementById('statusSpeed').classList.add('hidden');
         document.getElementById('statusDist').classList.add('hidden');
@@ -1107,6 +1108,8 @@
         // Clear trail
         trailPositions.length = 0;
         if (trailPolyline) { map.removeLayer(trailPolyline); trailPolyline = null; }
+        // Remove position marker — device is no longer at that location
+        if (posMarker) { map.removeLayer(posMarker); posMarker = null; }
       } catch (err) {
         console.error('sim stop failed:', err);
       }
