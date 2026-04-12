@@ -402,6 +402,7 @@
           body: JSON.stringify({ lat, lng }),
         });
         updatePosMarker(lat, lng);
+        isInjectionActive = true;
       } catch (err) {
         console.error('location/set failed:', err);
       }
@@ -542,6 +543,7 @@
           await fetch('/api/devices/disconnect', { method: 'POST' });
         } catch (_) {}
         connected = false;
+        isInjectionActive = false;
         connectBtn.textContent = '連線';
         connectBtn.classList.replace('bg-red-600', 'bg-blue-600');
         connectBtn.classList.replace('hover:bg-red-700', 'hover:bg-blue-700');
@@ -557,6 +559,9 @@
         const data = await res.json();
         if (data.connected) {
           connected = true;
+          // Assume server still has active injection (can't know for sure after refresh).
+          // Better to prompt an extra time than skip a warning.
+          isInjectionActive = true;
           connectBtn.textContent = '中斷連線';
           connectBtn.classList.replace('bg-blue-600', 'bg-red-600');
           connectBtn.classList.replace('hover:bg-blue-700', 'hover:bg-red-700');
@@ -934,6 +939,7 @@
     let lastSimPosition = null;  // {lat, lng} — last known simulated position
     let routeVersion = 0;        // increments each time a new route is planned
     let startedRouteVersion = -1; // which routeVersion the current simulation uses
+    let isInjectionActive = false; // true when device location is being simulated (sim or static)
 
     function updateStatusBar(data) {
       if (data.lat !== undefined && data.lng !== undefined) {
@@ -1039,6 +1045,7 @@
           startedRouteVersion = routeVersion;
           setStatus('啟動中...', 'text-green-400');
         }
+        isInjectionActive = true;
       } catch (err) {
         console.error('sim start failed:', err);
       }
@@ -1084,14 +1091,14 @@
     }
 
     document.getElementById('stopBtn').addEventListener('click', async () => {
-      // Only prompt if something is actually running
-      const active = connected && currentSimStatus !== 'idle';
-      if (active) {
+      // Only prompt if device is connected and location is actively being injected
+      if (connected && isInjectionActive) {
         const ok = await showConfirm();
         if (!ok) return;
       }
       try {
         await fetch('/api/simulation/stop', { method: 'POST' });
+        isInjectionActive = false;
         currentSimStatus = 'idle';
         setStatus('已停止', 'text-red-400');
         document.getElementById('statusSpeed').classList.add('hidden');
