@@ -118,7 +118,11 @@
         </button>
 
         <!-- Options -->
-        <div class="flex gap-3 mb-2 text-xs text-gray-400">
+        <div class="flex flex-wrap gap-x-3 gap-y-1 mb-2 text-xs text-gray-400">
+          <label class="flex items-center gap-1 cursor-pointer">
+            <input id="fromCurrentChk" type="checkbox" class="accent-blue-500" />
+            從目前位置出發
+          </label>
           <label class="flex items-center gap-1 cursor-pointer">
             <input id="returnToStartChk" type="checkbox" class="accent-blue-500" />
             返回起點
@@ -725,6 +729,7 @@
       const fromQ = document.getElementById('fromInput').value.trim();
       const toQ   = document.getElementById('toInput').value.trim();
       const returnToStart = document.getElementById('returnToStartChk').checked;
+      const fromCurrent = document.getElementById('fromCurrentChk').checked;
 
       // Build points list: prefer map points, fall back to text inputs
       let points = [];
@@ -747,6 +752,18 @@
         // Add any map waypoints in between
         routePoints.forEach(p => points.push(p));
         if (endPt) points.push(endPt);
+      } else if (routePoints.length === 1) {
+        // Single map point — treat it as destination (needs fromCurrent or text inputs)
+        points = routePoints.slice();
+      }
+
+      // Prepend current simulated position as start if checkbox is on
+      if (fromCurrent) {
+        if (!lastSimPosition) {
+          setStatus('沒有目前位置可用（尚未模擬）', 'text-yellow-400');
+          return;
+        }
+        points.unshift({ lat: lastSimPosition.lat, lng: lastSimPosition.lng });
       }
 
       if (points.length < 2) {
@@ -877,8 +894,12 @@
     }
 
     let currentSimStatus = 'idle';
+    let lastSimPosition = null;  // {lat, lng} — last known simulated position
 
     function updateStatusBar(data) {
+      if (data.lat !== undefined && data.lng !== undefined) {
+        lastSimPosition = { lat: data.lat, lng: data.lng };
+      }
       const statusEl = document.getElementById('statusText');
       const speedEl  = document.getElementById('statusSpeed');
       const distEl   = document.getElementById('statusDist');
