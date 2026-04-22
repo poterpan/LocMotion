@@ -437,6 +437,18 @@
       });
     }
 
+    function syncTextInputsState() {
+      // 地圖上有任何路線點時，文字起終點框禁用 — 地圖點優先於文字輸入
+      const hasMapPoints = routePoints.length >= 1;
+      ['fromInput', 'toInput'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.disabled = hasMapPoints;
+        el.classList.toggle('opacity-50', hasMapPoints);
+        el.classList.toggle('cursor-not-allowed', hasMapPoints);
+      });
+    }
+
     function refreshPointMarkers() {
       routePointMarkers.forEach(m => map.removeLayer(m));
       routePointMarkers.length = 0;
@@ -454,6 +466,7 @@
         routePointMarkers.push(m);
       });
       updateWaypointList();
+      syncTextInputsState();
     }
 
     function updateWaypointList() {
@@ -777,12 +790,11 @@
       const returnToStart = document.getElementById('returnToStartChk').checked;
       const fromCurrent = document.getElementById('fromCurrentChk').checked;
 
-      // Build points list: prefer map points, fall back to text inputs
+      // 優先順序：地圖路線點 > 文字輸入框。有地圖點時完全忽略文字框。
       let points = [];
-      if (routePoints.length >= 2) {
+      if (routePoints.length >= 1) {
         points = routePoints.slice();
       } else if (fromQ || toQ) {
-        // Geocode text inputs
         setStatus('搜尋地址中...', 'text-gray-300');
         let startPt = selectedCoords['fromInput'];
         let endPt   = selectedCoords['toInput'];
@@ -795,20 +807,17 @@
           endPt = r && r.length > 0 ? r[0] : null;
         }
         if (startPt) points.push(startPt);
-        // Add any map waypoints in between
-        routePoints.forEach(p => points.push(p));
         if (endPt) points.push(endPt);
-      } else if (routePoints.length === 1) {
-        // Single map point — treat it as destination (needs fromCurrent or text inputs)
-        points = routePoints.slice();
       }
 
-      // Prepend current simulated position as start if checkbox is on
+      // 勾「從目前位置出發」= 用 lastSimPosition 取代起點。
+      // 若已有 >=2 個點（含明確起點），丟掉第一個再 unshift。
       if (fromCurrent) {
         if (!lastSimPosition) {
           setStatus('沒有目前位置可用（尚未模擬）', 'text-yellow-400');
           return;
         }
+        if (points.length >= 2) points.shift();
         points.unshift({ lat: lastSimPosition.lat, lng: lastSimPosition.lng });
       }
 
