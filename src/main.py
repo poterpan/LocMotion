@@ -325,4 +325,5 @@ async def api_geocode_search(q: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("src.main:app", host="0.0.0.0", port=8080, reload=True)
+    # reload_dirs 限定在 src/ — 避免 .worktrees/ 裡的修改觸發重載
+    uvicorn.run("src.main:app", host="0.0.0.0", port=8080, reload=True, reload_dirs=["src"])
