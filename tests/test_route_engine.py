@@ -93,6 +93,55 @@ class TestFindTrafficSignals:
         # Should be sorted by distance_along_route
         assert stops[0].distance_along_route <= stops[1].distance_along_route
 
+    @pytest.mark.asyncio
+    async def test_merges_signals_at_same_intersection(self, engine):
+        # 大路口 OSM 每個轉角一個 traffic_signals 節點，沿路線距離相近的要合併成一個停等點
+        route = Route(
+            polyline=[
+                LatLng(lat=25.0, lng=121.5),
+                LatLng(lat=25.0, lng=121.52),
+            ],
+            distance=2016.0, duration=120.0, steps=[],
+        )
+        # 1 & 2: 沿路線相距 ~20m（同一路口 → 合併）
+        # 3 & 4: 再 ~180m 後，也相距 ~20m（另一路口 → 合併）
+        overpass_resp = {
+            "elements": [
+                {"type": "node", "id": 1, "lat": 25.0001, "lon": 121.504959},
+                {"type": "node", "id": 2, "lat": 25.0001, "lon": 121.505157},
+                {"type": "node", "id": 3, "lat": 25.0001, "lon": 121.506943},
+                {"type": "node", "id": 4, "lat": 25.0001, "lon": 121.507141},
+            ],
+        }
+        mock_resp = make_mock_response(overpass_resp)
+        with patch.object(engine._client, "get", new_callable=AsyncMock, return_value=mock_resp):
+            stops = await engine.find_traffic_signals(route)
+        assert len(stops) == 2
+        assert 480 < stops[0].distance_along_route < 520
+        assert 680 < stops[1].distance_along_route < 720
+
+    @pytest.mark.asyncio
+    async def test_chain_merges_consecutive_close_signals(self, engine):
+        # 三個 ~30m 間隔形成一串，要合併成單一停等點
+        route = Route(
+            polyline=[
+                LatLng(lat=25.0, lng=121.5),
+                LatLng(lat=25.0, lng=121.52),
+            ],
+            distance=2016.0, duration=120.0, steps=[],
+        )
+        overpass_resp = {
+            "elements": [
+                {"type": "node", "id": 1, "lat": 25.0001, "lon": 121.504959},
+                {"type": "node", "id": 2, "lat": 25.0001, "lon": 121.505257},
+                {"type": "node", "id": 3, "lat": 25.0001, "lon": 121.505555},
+            ],
+        }
+        mock_resp = make_mock_response(overpass_resp)
+        with patch.object(engine._client, "get", new_callable=AsyncMock, return_value=mock_resp):
+            stops = await engine.find_traffic_signals(route)
+        assert len(stops) == 1
+
 
 class TestSnapToRoute:
     def test_point_on_segment(self, engine):

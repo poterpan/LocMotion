@@ -26,6 +26,10 @@ NOMINATIM_BASE = "https://nominatim.openstreetmap.org"
 
 _OSRM_PROFILES = {"driving": "car", "walking": "foot", "cycling": "bike"}
 
+# 大路口 OSM 常把每個轉角標成獨立 traffic_signals 節點，
+# 沿路線距離小於此值者視為同一路口並合併成一個停等點
+SIGNAL_MERGE_DISTANCE_M = 40.0
+
 
 class RouteEngine:
     def __init__(self):
@@ -93,7 +97,16 @@ class RouteEngine:
                 stops.append(StopPoint(position=p, distance_along_route=along))
 
         stops.sort(key=lambda s: s.distance_along_route)
-        return stops
+
+        merged: list[StopPoint] = []
+        cluster_last_d: float | None = None
+        for sp in stops:
+            if cluster_last_d is not None and sp.distance_along_route - cluster_last_d < SIGNAL_MERGE_DISTANCE_M:
+                cluster_last_d = sp.distance_along_route
+                continue
+            merged.append(sp)
+            cluster_last_d = sp.distance_along_route
+        return merged
 
     async def _osrm_query(self, profile: str, coords_str: str) -> dict | None:
         """Run OSRM route query with retry + mirror fallback."""
