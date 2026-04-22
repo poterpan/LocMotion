@@ -69,6 +69,8 @@ sudo .venv/bin/python -m src.main
 
 測試執行注意：subagent 環境不能 `source`，請直接用 `.venv/bin/python -m pytest`。
 
+`uvicorn.run` 帶 `reload_dirs=["src"]`（見 `main.py`）— 在 `.worktrees/` 裡改檔案不會觸發主目錄 server 重啟。別拿掉。
+
 ## pymobiledevice3 版本相容性注意事項
 
 這個函式庫的 API 不太穩定，實作中踩過的坑：
@@ -97,7 +99,9 @@ sudo .venv/bin/python -m src.main
 ### 前端互動設計
 - **單擊地圖** → 500ms 延遲後加路線點（dblclick 會取消）
 - **雙擊地圖** → 設定靜態定位（需已連線裝置）
-- **從目前位置出發** checkbox → 用 `lastSimPosition` 作新路線起點，支援 A→B→C 接續導航
+- **從目前位置出發** checkbox → 用 `lastSimPosition` **取代**起點（points >= 2 時會先 shift 掉舊起點再 unshift），支援 A→B→C 接續導航
+- **地圖點優先於文字框** → `routePoints.length >= 1` 時，`fromInput`/`toInput` 整個被忽略並在 UI disable 反灰；沒有地圖點時才吃文字框
+- **紅綠燈合併** → `route_engine.find_traffic_signals` 會把沿路線 `SIGNAL_MERGE_DISTANCE_M` (40m) 內的 signals collapse 成單一 `StopPoint`，避免大路口連續停等
 - **routeVersion 追蹤** → 確保模擬中改路線後，按「開始」會重啟而非 resume
 
 ### 狀態機
