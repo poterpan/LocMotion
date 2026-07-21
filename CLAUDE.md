@@ -85,6 +85,8 @@ sudo .venv/bin/python -m src.main
 
 - **OSRM** (`router.project-osrm.org`) — 公開 demo，時常慢或 503。備用：`routing.openstreetmap.de`（URL 格式不同：`/routed-{car,foot,bike}/route/v1/driving/...`）。
 - **Overpass** (`overpass-api.de`) — 非常不穩定，504 Gateway Timeout 很常見。有 3 個 mirror。查詢 timeout 設在 25s。
+  - 只有 `overpass-api.de` 回正確資料；`kumi.systems` 常 timeout、`osm.ch` 會回 **HTTP 200 但 elements 空**。故 `_overpass_query` **優先採用有資料的回應**（200+非空立刻用；200+空先記著繼續試，全空才回 `[]`），避免壞 mirror 的空資料污染成 0 筆。
+  - `find_traffic_signals` 有 **bbox 記憶體快取**（`SIGNAL_CACHE_GRID` 對齊網格當 key、存原始節點、無 TTL、上限 `SIGNAL_CACHE_MAX`、**只快取非空**）。同區域重複規劃即時命中。刻意不做磁碟持久化（避免永久快取到空/壞資料）。
 - **Nominatim** (`nominatim.openstreetmap.org`) — 要求帶 User-Agent（我們用 `"LocMotion/1.0"`）、速率 1 req/sec。
 
 ## Testing Conventions
@@ -102,6 +104,7 @@ sudo .venv/bin/python -m src.main
 - **從目前位置出發** checkbox → 用 `lastSimPosition` **取代**起點（points >= 2 時會先 shift 掉舊起點再 unshift），支援 A→B→C 接續導航
 - **地圖點優先於文字框** → `routePoints.length >= 1` 時，`fromInput`/`toInput` 整個被忽略並在 UI disable 反灰；沒有地圖點時才吃文字框
 - **紅綠燈合併** → `route_engine.find_traffic_signals` 會把沿路線 `SIGNAL_MERGE_DISTANCE_M` (40m) 內的 signals collapse 成單一 `StopPoint`，避免大路口連續停等
+- **紅綠燈背景載入** → `/api/route/plan`、`/api/route/upload` **不查** Overpass，路線秒回（stop_points 為空）；前端畫完路線後呼叫 `GET /api/route/traffic_signals` 背景補上 🚦 marker。按「開始」前 `await signalsPromise` 確保後端 `current_route.stop_points` 已填好，停等點不漏。原因：Overpass 6~40s 是規劃卡頓主因，OSRM 本身 ~1s
 - **routeVersion 追蹤** → 確保模擬中改路線後，按「開始」會重啟而非 resume
 
 ### 狀態機
