@@ -384,8 +384,15 @@
 
     // Route polyline
     let routePolyline = null;
-    // Traffic signal markers
+    // Traffic signal markers (🚦) — 由 GET /api/route/traffic_signals 背景載入
     let signalMarkers = [];
+    let signalsPromise = null;   // 進行中的紅綠燈載入，開始模擬前會 await
+    const signalIcon = L.divIcon({
+      className: '',
+      html: '<div style="font-size:18px;line-height:18px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.55))">🚦</div>',
+      iconSize: [18, 18],
+      iconAnchor: [9, 9],
+    });
     // Trail (last 200 positions)
     const trailPositions = [];
     let trailPolyline = null;
@@ -843,7 +850,8 @@
         routeVersion++;
         const hint = (currentSimStatus !== 'idle' && currentSimStatus !== 'completed')
           ? '（按開始套用新路線）' : '';
-        setStatus('路線已規劃（' + (data.distance / 1000).toFixed(1) + ' km）' + hint, 'text-green-400');
+        const baseMsg = '路線已規劃（' + (data.distance / 1000).toFixed(1) + ' km）' + hint;
+        loadTrafficSignals(baseMsg);   // 路線已顯示，紅綠燈背景補上
       } catch (err) {
         console.error('planRoute failed:', err);
         setStatus('路線規劃失敗', 'text-red-400');
@@ -864,7 +872,7 @@
         const data = await res.json();
         drawRoute(data);
         routeVersion++;
-        setStatus('已載入路線檔案', 'text-green-400');
+        loadTrafficSignals('已載入路線檔案');   // 路線已顯示，紅綠燈背景補上
       } catch (err) {
         console.error('upload failed:', err);
         setStatus('檔案上傳失敗', 'text-red-400');
@@ -875,17 +883,52 @@
     // ------------------------------------------------------------------ //
     //  Draw route on map                                                   //
     // ------------------------------------------------------------------ //
+    function clearSignalMarkers() {
+      signalMarkers.forEach(m => map.removeLayer(m));
+      signalMarkers = [];
+    }
+
+    // 依 stop_points 畫 🚦 marker（先清掉舊的）
+    function renderSignalMarkers(stops) {
+      clearSignalMarkers();
+      (stops || []).forEach(sp => {
+        const pos = sp.position || sp;
+        const m = L.marker([pos.lat, pos.lng], { icon: signalIcon, interactive: false }).addTo(map);
+        signalMarkers.push(m);
+      });
+    }
+
+    // 背景載入沿路線紅綠燈：路線已先畫好，這裡回來再補 🚦。
+    // 回傳 promise 存進 signalsPromise，開始模擬前會 await 確保後端 stop_points 已填好。
+    function loadTrafficSignals(baseMsg) {
+      setStatus(baseMsg + ' · 紅綠燈載入中…', 'text-gray-300');
+      signalsPromise = (async () => {
+        try {
+          const res = await fetch('/api/route/traffic_signals');
+          if (!res.ok) { setStatus(baseMsg, 'text-green-400'); return; }
+          const data = await res.json();
+          const stops = data.stop_points || [];
+          renderSignalMarkers(stops);
+          setStatus(baseMsg + ' · 🚦 ' + stops.length + ' 個', 'text-green-400');
+        } catch (err) {
+          console.error('traffic signals load failed:', err);
+          setStatus(baseMsg, 'text-green-400');
+        }
+      })();
+      return signalsPromise;
+    }
+
     function drawRoute(data) {
       // Clear existing route layers
       if (routePolyline) { map.removeLayer(routePolyline); routePolyline = null; }
-      signalMarkers.forEach(m => map.removeLayer(m));
-      signalMarkers = [];
+      clearSignalMarkers();
       trailPositions.length = 0;
       if (trailPolyline) { map.removeLayer(trailPolyline); trailPolyline = null; }
 
       if (!data) return;
 
-      // API returns { polyline: [{lat,lng}], stop_points: [{position:{lat,lng}}], ... }
+      // API returns { polyline: [{lat,lng}], stop_points: [...], ... }
+      // 規劃/上傳當下 stop_points 通常為空——紅綠燈由 loadTrafficSignals 背景補上
       const poly = data.polyline || [];
       if (poly.length > 0) {
         const latLngs = poly.map(p => [p.lat, p.lng]);
@@ -893,14 +936,7 @@
         map.fitBounds(routePolyline.getBounds(), { padding: [30, 30] });
       }
 
-      const stops = data.stop_points || [];
-      stops.forEach(sp => {
-        const pos = sp.position || sp;
-        const m = L.circleMarker([pos.lat, pos.lng], {
-          radius: 5, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.9, weight: 1,
-        }).addTo(map);
-        signalMarkers.push(m);
-      });
+      renderSignalMarkers(data.stop_points || []);
     }
 
     // ------------------------------------------------------------------ //
@@ -1055,6 +1091,8 @@
           await fetch('/api/simulation/resume', { method: 'POST' });
           setStatus('繼續中...', 'text-green-400');
         } else {
+          // 確保紅綠燈已背景載入完（後端 current_route.stop_points 已填好），停等點才不會漏
+          if (signalsPromise) { setStatus('等紅綠燈載入…', 'text-gray-300'); await signalsPromise; }
           await fetch('/api/simulation/start', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1135,8 +1173,8 @@
 
     document.getElementById('clearRouteBtn').addEventListener('click', () => {
       if (routePolyline) { map.removeLayer(routePolyline); routePolyline = null; }
-      signalMarkers.forEach(m => map.removeLayer(m));
-      signalMarkers = [];
+      clearSignalMarkers();
+      signalsPromise = null;
       routePoints.length = 0;
       refreshPointMarkers();
     });
