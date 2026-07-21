@@ -30,6 +30,12 @@ _OSRM_PROFILES = {"driving": "car", "walking": "foot", "cycling": "bike"}
 # 沿路線距離小於此值者視為同一路口並合併成一個停等點
 SIGNAL_MERGE_DISTANCE_M = 40.0
 
+# 紅綠燈 bbox 快取：把 route bbox 往外對齊到此網格（約 1.1km），
+# 讓「同一區域重複規劃」命中快取。紅綠燈是道路基礎設施、位置基本不變，
+# 故不設 TTL——快取活在 process 生命週期內，重啟自然清空。
+SIGNAL_CACHE_GRID = 0.01
+SIGNAL_CACHE_MAX = 256
+
 
 class RouteEngine:
     def __init__(self):
@@ -37,6 +43,9 @@ class RouteEngine:
             timeout=15.0,
             headers={"User-Agent": "LocMotion/1.0"},
         )
+        # bbox(grid-snapped) -> raw Overpass signal 節點。dict 插入序當 LRU。
+        self._signal_cache: dict[tuple, list] = {}
+        self._signal_cache_max = SIGNAL_CACHE_MAX
 
     async def close(self):
         await self._client.aclose()
@@ -78,16 +87,24 @@ class RouteEngine:
         )
 
     async def find_traffic_signals(self, route: Route) -> list[StopPoint]:
-        bbox = self._route_bbox(route, buffer_m=50)
-        query = (
-            f"[out:json][timeout:25];"
-            f'node["highway"="traffic_signals"]'
-            f"({bbox['south']},{bbox['west']},{bbox['north']},{bbox['east']});"
-            f"out body;"
-        )
-        elements = await self._overpass_query(query)
+        # bbox 往外對齊到網格，讓同區域重複規劃命中快取；快取存原始節點，
+        # stops 依各路線 polyline 重新 snap（本地便宜運算）。
+        bbox = self._snap_bbox_to_grid(self._route_bbox(route, buffer_m=50))
+        key = (bbox["south"], bbox["west"], bbox["north"], bbox["east"])
+
+        elements = self._signal_cache_get(key)
         if elements is None:
-            return []
+            query = (
+                f"[out:json][timeout:25];"
+                f'node["highway"="traffic_signals"]'
+                f"({bbox['south']},{bbox['west']},{bbox['north']},{bbox['east']});"
+                f"out body;"
+            )
+            elements = await self._overpass_query(query)
+            # None（全數失敗）或空 []（不穩 mirror 的壞回應）都不快取，下次重試。
+            if not elements:
+                return []
+            self._signal_cache_put(key, elements)
 
         stops: list[StopPoint] = []
         for el in elements:
@@ -138,9 +155,16 @@ class RouteEngine:
         return None
 
     async def _overpass_query(self, query: str) -> list | None:
-        """Run Overpass query with retry + mirror fallback. Returns elements or None on total failure."""
+        """Run Overpass query with retry + mirror fallback.
+
+        優先採用「有資料的回應」：某些 mirror（如 overpass.osm.ch）會回 HTTP 200
+        但 elements 為空，若直接採用就會在主 endpoint 偶發 504 時被污染成 0 筆。
+        因此拿到 200+非空 → 立刻用；拿到 200+空 → 先記著、繼續試其他 endpoint / 下一輪，
+        全程只拿到空 → 才視為該區真的沒紅綠燈回 []；全錯 → None。
+        """
         import asyncio as _asyncio
         last_err = None
+        saw_empty_200 = False
         for attempt in range(2):  # try each endpoint up to 2 times
             for endpoint in OVERPASS_ENDPOINTS:
                 try:
@@ -148,14 +172,22 @@ class RouteEngine:
                         endpoint, params={"data": query}, timeout=30.0,
                     )
                     if resp.status_code == 200:
-                        return resp.json().get("elements", [])
-                    last_err = f"{endpoint} -> {resp.status_code}"
+                        elements = resp.json().get("elements", [])
+                        if elements:
+                            return elements  # 有資料 → 立刻採用
+                        saw_empty_200 = True  # 空 200：可能是壞 mirror，繼續找有資料的
+                        last_err = f"{endpoint} -> 200 empty"
+                    else:
+                        last_err = f"{endpoint} -> {resp.status_code}"
                     logger.debug(f"Overpass {last_err}")
                 except Exception as e:
                     last_err = f"{endpoint} -> {e}"
                     logger.debug(f"Overpass {last_err}")
             if attempt == 0:
                 await _asyncio.sleep(1.0)  # brief backoff before retry round
+        if saw_empty_200:
+            logger.info("Overpass: all endpoints returned empty; treating region as no-signals")
+            return []
         logger.warning(f"All Overpass endpoints failed, skipping traffic signals. Last: {last_err}")
         return None
 
@@ -215,6 +247,28 @@ class RouteEngine:
              "display_name": r.get("display_name", "")}
             for r in resp.json()
         ]
+
+    def _snap_bbox_to_grid(self, bbox: dict) -> dict:
+        """把 bbox 往外對齊到 SIGNAL_CACHE_GRID 網格（對齊後 ⊇ 原 bbox）。"""
+        g = SIGNAL_CACHE_GRID
+        return {
+            "south": math.floor(bbox["south"] / g) * g,
+            "west": math.floor(bbox["west"] / g) * g,
+            "north": math.ceil(bbox["north"] / g) * g,
+            "east": math.ceil(bbox["east"] / g) * g,
+        }
+
+    def _signal_cache_get(self, key: tuple) -> list | None:
+        val = self._signal_cache.pop(key, None)
+        if val is not None:
+            self._signal_cache[key] = val  # 命中 → 移到最新（LRU）
+        return val
+
+    def _signal_cache_put(self, key: tuple, elements: list) -> None:
+        self._signal_cache.pop(key, None)
+        while len(self._signal_cache) >= self._signal_cache_max:
+            self._signal_cache.pop(next(iter(self._signal_cache)))  # 淘汰最舊
+        self._signal_cache[key] = elements
 
     def _route_bbox(self, route: Route, buffer_m: float = 50) -> dict:
         lats = [p.lat for p in route.polyline]

@@ -151,8 +151,7 @@ async def api_plan_route(body: dict):
 
     mode = body.get("mode", "driving")
     route = await route_engine.plan_route(start, end, mode, waypoints=waypoints)
-    stops = await route_engine.find_traffic_signals(route)
-    route.stop_points = stops
+    # 紅綠燈改由 GET /api/route/traffic_signals 背景載入，讓路線秒回（Overpass 慢又不穩）
     current_route = route
     return route.model_dump()
 
@@ -172,10 +171,19 @@ async def api_upload_route(file: UploadFile = File(...)):
             {"error": f"Unsupported format: {name}"}, status_code=400,
         )
 
-    stops = await route_engine.find_traffic_signals(route)
-    route.stop_points = stops
+    # 紅綠燈同樣改由 GET /api/route/traffic_signals 背景載入
     current_route = route
     return route.model_dump()
+
+
+@app.get("/api/route/traffic_signals")
+async def api_route_traffic_signals():
+    """背景載入沿路線紅綠燈（走 route_engine bbox 快取），寫回 current_route.stop_points。"""
+    if current_route is None:
+        return JSONResponse({"error": "No route planned"}, status_code=404)
+    stops = await route_engine.find_traffic_signals(current_route)
+    current_route.stop_points = stops
+    return {"stop_points": [s.model_dump() for s in stops]}
 
 
 @app.get("/api/route/preview")
